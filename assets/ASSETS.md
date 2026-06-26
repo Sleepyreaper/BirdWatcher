@@ -10,12 +10,14 @@ Git-ignored payloads are noted. Update this whenever we download/generate an ass
 Core: `flask`, `pyyaml`
 Vision: `opencv-python` (Pi: `opencv-python-headless`), `numpy`
 Detection: `ultralytics` (pulls `torch`, `torchvision`)
-Later (M4/M6, TBD): species classifier backend, `birdnetlib` for audio
+M4 species ID: `open_clip_torch`, `pillow` (local BioCLIP). Later (M6): `birdnetlib` for audio.
 > On the Pi we'll export YOLO to **NCNN** for speed (`yolo export format=ncnn`).
 
 ## Models
 - `yolov8n.pt` — auto-downloaded by ultralytics to the project root (~6 MB, git-ignored).
   Regenerate on the Pi by running once, or copy over. NCNN export is the Pi target.
+- BioCLIP (`hf-hub:imageomics/bioclip`) — fetched by open_clip into the HuggingFace cache
+  (`~/.cache/huggingface`) on first run (~hundreds of MB). Re-downloads automatically on the Pi.
 
 ## Reference images  (`assets/reference/`, git-ignored)
 One canonical field-guide photo per species, for the UI row avatars.

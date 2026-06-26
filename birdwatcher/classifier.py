@@ -1,9 +1,10 @@
 """Pluggable bird species classification.
 
 Backends (selected via config.classifier.backend):
-  - "stub"  : no ML deps; labels everything "Unknown bird" (wiring/test path).
-  - "tfhub" : Google aiy/birds_V1, ~964 species, fully local, no API key.
-  - "claude": sends the crop to Claude vision; best accuracy, costs API tokens.
+  - "stub"    : no ML deps; labels everything "Unknown bird" (wiring/test path).
+  - "bioclip" : local BioCLIP zero-shot against the species catalog (no API key).
+  - "tfhub"   : Google aiy/birds_V1 (needs TensorFlow; no Python 3.14 wheels yet).
+  - "claude"  : Claude vision (needs ANTHROPIC_API_KEY).
 
 All backends implement: classify(crop_bgr) -> SpeciesResult
 """
@@ -11,7 +12,6 @@ All backends implement: classify(crop_bgr) -> SpeciesResult
 from __future__ import annotations
 
 import base64
-import io
 from dataclasses import dataclass
 
 from .config import ClassifierConfig
@@ -35,21 +35,71 @@ class StubClassifier(SpeciesClassifier):
         return SpeciesResult("Unknown bird", 1.0)
 
 
+class BioClipClassifier(SpeciesClassifier):
+    """Local zero-shot species ID with BioCLIP, constrained to the catalog.
+
+    Scores the crop against the Cobb/Cole's common names and returns the best
+    match. Fully offline once the model is cached; no API key. Accuracy is high
+    on clear birds but depends on crop quality — a bird behind feeder-cage bars
+    or small in frame can still be misread.
+    """
+
+    def __init__(self, cfg: ClassifierConfig):
+        import json
+
+        import open_clip
+        import torch
+
+        from .config import PROJECT_ROOT
+
+        self.cfg = cfg
+        self.torch = torch
+        catalog = json.loads(
+            (PROJECT_ROOT / "data" / "species_catalog.json").read_text(encoding="utf-8")
+        )
+        self._names = [s["common_name"] for s in catalog["species"]]
+
+        model, _, preprocess = open_clip.create_model_and_transforms(
+            "hf-hub:imageomics/bioclip"
+        )
+        model.eval()
+        self.model, self.preprocess = model, preprocess
+        tokenizer = open_clip.get_tokenizer("hf-hub:imageomics/bioclip")
+        with torch.no_grad():
+            txt = model.encode_text(tokenizer([f"a photo of {n}." for n in self._names]))
+            txt /= txt.norm(dim=-1, keepdim=True)
+        self._txt = txt
+
+    def classify(self, crop) -> SpeciesResult:
+        import cv2
+        from PIL import Image
+
+        if crop is None or crop.size == 0:
+            return SpeciesResult("Unknown bird", 0.0)
+        rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+        img = self.preprocess(Image.fromarray(rgb)).unsqueeze(0)
+        with self.torch.no_grad():
+            feat = self.model.encode_image(img)
+            feat /= feat.norm(dim=-1, keepdim=True)
+            probs = (100.0 * feat @ self._txt.T).softmax(dim=-1)[0]
+        idx = int(probs.argmax())
+        return SpeciesResult(self._names[idx], float(probs[idx]))
+
+
 class TFHubBirdClassifier(SpeciesClassifier):
-    """Google's on-device bird classifier (~964 species)."""
+    """Google's on-device bird classifier (~964 species). Needs TensorFlow."""
 
     def __init__(self, cfg: ClassifierConfig):
         import csv
         import urllib.request
 
-        import numpy as np  # noqa: F401  (used at classify time)
+        import numpy as np  # noqa: F401
         import tensorflow as tf
         import tensorflow_hub as hub
 
         self.cfg = cfg
         self._tf = tf
         self._model = hub.load(cfg.tfhub_handle)
-        # The model ships a labelmap; fetch + cache species names.
         labelmap_url = (
             "https://www.gstatic.com/aihub/tfhub/labelmaps/aiy_birds_V1_labelmap.csv"
         )
@@ -77,7 +127,7 @@ class ClaudeBirdClassifier(SpeciesClassifier):
         from anthropic import Anthropic
 
         self.cfg = cfg
-        self._client = Anthropic()  # picks up ANTHROPIC_API_KEY
+        self._client = Anthropic()
 
     def classify(self, crop) -> SpeciesResult:
         import json
@@ -91,34 +141,21 @@ class ClaudeBirdClassifier(SpeciesClassifier):
         msg = self._client.messages.create(
             model=self.cfg.claude_model,
             max_tokens=200,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": b64,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": (
-                                "Identify the bird species in this feeder photo. "
-                                'Reply ONLY as JSON: {"species": "Common Name", '
-                                '"confidence": 0.0-1.0}. If unsure, use '
-                                '"Unknown bird" with low confidence.'
-                            ),
-                        },
-                    ],
-                }
-            ],
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64",
+                     "media_type": "image/jpeg", "data": b64}},
+                    {"type": "text", "text": (
+                        "Identify the bird species in this feeder photo. Reply ONLY as "
+                        'JSON: {"species": "Common Name", "confidence": 0.0-1.0}. '
+                        'If unsure, use "Unknown bird" with low confidence.')},
+                ],
+            }],
         )
         text = "".join(b.text for b in msg.content if b.type == "text")
         try:
-            data = json.loads(text[text.index("{") : text.rindex("}") + 1])
+            data = json.loads(text[text.index("{"): text.rindex("}") + 1])
             return SpeciesResult(str(data["species"]), float(data["confidence"]))
         except (ValueError, KeyError):
             return SpeciesResult("Unknown bird", 0.0)
@@ -128,6 +165,8 @@ def build_classifier(cfg: ClassifierConfig) -> SpeciesClassifier:
     backend = (cfg.backend or "stub").lower()
     if backend == "stub":
         return StubClassifier()
+    if backend == "bioclip":
+        return BioClipClassifier(cfg)
     if backend == "tfhub":
         return TFHubBirdClassifier(cfg)
     if backend == "claude":

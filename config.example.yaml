@@ -23,8 +23,8 @@ detector:
   crop_pad_frac: 0.15
 
 classifier:
-  backend: "stub"           # "stub" | "tfhub" | "claude"
-  min_confidence: 0.25
+  backend: "bioclip"        # "stub" | "bioclip" (local, no key) | "tfhub" | "claude"
+  min_confidence: 0.30      # below this a visit is logged as "Unknown bird"
   tfhub_handle: "https://tfhub.dev/google/aiy/vision/classifier/birds_V1/1"
   claude_model: "claude-opus-4-8"
 

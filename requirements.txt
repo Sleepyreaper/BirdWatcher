@@ -7,8 +7,12 @@ opencv-python>=4.9
 numpy>=1.26
 ultralytics>=8.1            # YOLO bird detector (auto-downloads yolov8n.pt)
 
-# --- species ID, pick ONE backend (milestone M4) ---
-# tfhub backend (local, ~964 species):
+# --- species ID (milestone M4) ---
+# bioclip backend (local zero-shot vs the catalog — CHOSEN, no API key):
+open_clip_torch>=2.24
+pillow>=10.0
+#
+# tfhub backend (local; no Python 3.14 wheels yet):
 # tensorflow>=2.15
 # tensorflow-hub>=0.16
 #
