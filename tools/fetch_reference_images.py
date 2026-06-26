@@ -1,20 +1,22 @@
 #!/usr/bin/env python
 """Fetch one reference image per species in data/species_catalog.json.
 
-Pulls the lead photo from Wikipedia (Wikimedia Commons), saves it to
-assets/reference/<slug>.jpg, and writes the local path back into the catalog.
-Re-runnable: skips species that already have an image.
+Pulls each species' lead photo from Wikipedia (Wikimedia Commons) via the
+pageimages API, saves it to assets/reference/<slug>.jpg, and writes the local
+path back into the catalog. Re-runnable: skips species that already have an image.
 
     python tools/fetch_reference_images.py
 
-Be a good citizen: sets a User-Agent and sleeps between requests. Verify each
-image's license on Commons before redistributing beyond personal use.
+Uses a Wikimedia-compliant User-Agent (with contact) and polite delays + 429
+backoff so we don't get throttled. Verify each image's license on Commons before
+redistributing beyond personal use.
 """
 
 from __future__ import annotations
 
 import json
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -22,30 +24,43 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "data" / "species_catalog.json"
 OUT_DIR = ROOT / "assets" / "reference"
-UA = {"User-Agent": "BirdWatcher/0.1 (personal hobby project)"}
+UA = {"User-Agent": "BirdWatcherBot/0.1 (https://github.com/Sleepyreaper/BirdWatcher; sleepyreaper@gmail.com)"}
 
 
 def slug(name: str) -> str:
     return name.lower().replace(" ", "-").replace("'", "").replace("/", "-")
 
 
-def fetch_json(url: str) -> dict:
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=20) as fh:
-        return json.loads(fh.read().decode())
+def _fetch(url: str, tries: int = 4) -> bytes:
+    for i in range(tries):
+        try:
+            req = urllib.request.Request(url, headers=UA)
+            with urllib.request.urlopen(req, timeout=25) as fh:
+                return fh.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and i < tries - 1:
+                time.sleep(5 * (i + 1))  # back off and retry
+                continue
+            raise
+    raise RuntimeError("unreachable")
 
 
-def summary_image(title: str) -> str | None:
-    """Return the lead image URL for a Wikipedia page title, or None."""
-    url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(
-        title.replace(" ", "_")
+def page_image(title: str) -> str | None:
+    """Lead image URL for a Wikipedia article via pageimages (follows redirects)."""
+    api = (
+        "https://en.wikipedia.org/w/api.php?action=query&format=json&redirects=1"
+        "&prop=pageimages&piprop=original%7Cthumbnail&pithumbsize=500&titles="
+        + urllib.parse.quote(title)
     )
     try:
-        data = fetch_json(url)
+        data = json.loads(_fetch(api).decode())
     except Exception:
         return None
-    img = data.get("thumbnail") or data.get("originalimage")
-    return img["source"] if img else None
+    for page in data.get("query", {}).get("pages", {}).values():
+        img = page.get("thumbnail") or page.get("original")
+        if img:
+            return img["source"]
+    return None
 
 
 def main() -> None:
@@ -56,23 +71,25 @@ def main() -> None:
     for sp in catalog["species"]:
         if sp.get("reference_image"):
             continue
-        # try common name first, then scientific name
-        img_url = summary_image(sp["common_name"]) or summary_image(sp["scientific_name"])
+        img_url = page_image(sp["common_name"])
         if not img_url:
-            print(f"  ! no image found for {sp['common_name']}")
+            time.sleep(1.5)
+            img_url = page_image(sp["scientific_name"])
+        if not img_url:
+            print(f"  ! no image for {sp['common_name']}")
+            time.sleep(1.5)
             continue
         dest = OUT_DIR / f"{slug(sp['common_name'])}.jpg"
         try:
-            req = urllib.request.Request(img_url, headers=UA)
-            with urllib.request.urlopen(req, timeout=20) as fh:
-                dest.write_bytes(fh.read())
+            dest.write_bytes(_fetch(img_url))
         except Exception as e:
             print(f"  ! download failed for {sp['common_name']}: {e}")
+            time.sleep(1.5)
             continue
         sp["reference_image"] = str(dest.relative_to(ROOT)).replace("\\", "/")
         changed += 1
         print(f"  + {sp['common_name']} -> {dest.name}")
-        time.sleep(1.0)  # be gentle with Wikimedia
+        time.sleep(1.5)  # be gentle with Wikimedia
 
     if changed:
         CATALOG.write_text(json.dumps(catalog, indent=2), encoding="utf-8")

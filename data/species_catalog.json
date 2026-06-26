@@ -39,7 +39,7 @@
       "scientific_name": "Sitta carolinensis",
       "family": "Sittidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/white-breasted-nuthatch.jpg"
     },
     {
       "common_name": "Brown-headed Nuthatch",
@@ -74,14 +74,14 @@
       "scientific_name": "Colaptes auratus",
       "family": "Picidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/northern-flicker.jpg"
     },
     {
       "common_name": "Pileated Woodpecker",
       "scientific_name": "Dryocopus pileatus",
       "family": "Picidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/pileated-woodpecker.jpg"
     },
     {
       "common_name": "House Finch",
@@ -95,84 +95,84 @@
       "scientific_name": "Spinus tristis",
       "family": "Fringillidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/american-goldfinch.jpg"
     },
     {
       "common_name": "Pine Warbler",
       "scientific_name": "Setophaga pinus",
       "family": "Parulidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/pine-warbler.jpg"
     },
     {
       "common_name": "Blue Jay",
       "scientific_name": "Cyanocitta cristata",
       "family": "Corvidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/blue-jay.jpg"
     },
     {
       "common_name": "American Crow",
       "scientific_name": "Corvus brachyrhynchos",
       "family": "Corvidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/american-crow.jpg"
     },
     {
       "common_name": "Mourning Dove",
       "scientific_name": "Zenaida macroura",
       "family": "Columbidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/mourning-dove.jpg"
     },
     {
       "common_name": "Dark-eyed Junco",
       "scientific_name": "Junco hyemalis",
       "family": "Passerellidae",
       "seasonality": "winter",
-      "reference_image": null
+      "reference_image": "assets/reference/dark-eyed-junco.jpg"
     },
     {
       "common_name": "White-throated Sparrow",
       "scientific_name": "Zonotrichia albicollis",
       "family": "Passerellidae",
       "seasonality": "winter",
-      "reference_image": null
+      "reference_image": "assets/reference/white-throated-sparrow.jpg"
     },
     {
       "common_name": "Chipping Sparrow",
       "scientific_name": "Spizella passerina",
       "family": "Passerellidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/chipping-sparrow.jpg"
     },
     {
       "common_name": "Eastern Towhee",
       "scientific_name": "Pipilo erythrophthalmus",
       "family": "Passerellidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/eastern-towhee.jpg"
     },
     {
       "common_name": "Brown Thrasher",
       "scientific_name": "Toxostoma rufum",
       "family": "Mimidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/brown-thrasher.jpg"
     },
     {
       "common_name": "Northern Mockingbird",
       "scientific_name": "Mimus polyglottos",
       "family": "Mimidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/northern-mockingbird.jpg"
     },
     {
       "common_name": "American Robin",
       "scientific_name": "Turdus migratorius",
       "family": "Turdidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/american-robin.jpg"
     },
     {
       "common_name": "Eastern Bluebird",
@@ -186,49 +186,49 @@
       "scientific_name": "Archilochus colubris",
       "family": "Trochilidae",
       "seasonality": "summer",
-      "reference_image": null
+      "reference_image": "assets/reference/ruby-throated-hummingbird.jpg"
     },
     {
       "common_name": "Common Grackle",
       "scientific_name": "Quiscalus quiscula",
       "family": "Icteridae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/common-grackle.jpg"
     },
     {
       "common_name": "Brown-headed Cowbird",
       "scientific_name": "Molothrus ater",
       "family": "Icteridae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/brown-headed-cowbird.jpg"
     },
     {
       "common_name": "European Starling",
       "scientific_name": "Sturnus vulgaris",
       "family": "Sturnidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/european-starling.jpg"
     },
     {
       "common_name": "Cedar Waxwing",
       "scientific_name": "Bombycilla cedrorum",
       "family": "Bombycillidae",
       "seasonality": "year-round",
-      "reference_image": null
+      "reference_image": "assets/reference/cedar-waxwing.jpg"
     },
     {
       "common_name": "Ruby-crowned Kinglet",
       "scientific_name": "Corthylio calendula",
       "family": "Regulidae",
       "seasonality": "winter",
-      "reference_image": null
+      "reference_image": "assets/reference/ruby-crowned-kinglet.jpg"
     },
     {
       "common_name": "Yellow-rumped Warbler",
       "scientific_name": "Setophaga coronata",
       "family": "Parulidae",
       "seasonality": "winter",
-      "reference_image": null
+      "reference_image": "assets/reference/yellow-rumped-warbler.jpg"
     }
   ]
 }
