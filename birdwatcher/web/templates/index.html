@@ -8,10 +8,13 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>🐦 BirdWatcher</h1>
+    <div class="brand">
+      <h1>🐦 BirdWatcher</h1>
+      <div class="region" id="region">Loading…</div>
+    </div>
     <div class="weeknav">
       <button id="prev" title="Previous week">‹</button>
-      <span id="weeklabel">Loading…</span>
+      <span id="weeklabel"></span>
       <button id="next" title="Next week">›</button>
       <button id="today" class="ghost">This week</button>
     </div>
@@ -20,21 +23,22 @@
   <section id="stats" class="stats"></section>
 
   <main class="gridwrap">
-    <div id="grid" class="grid">
-      <!-- header row + species rows injected by app.js -->
+    <div id="grid" class="grid"></div>
+    <div class="legend">
+      <span>fewer</span>
+      <span class="sw" style="background:var(--panel-2)"></span>
+      <span class="sw" style="background:hsl(45 55% 26%)"></span>
+      <span class="sw" style="background:hsl(45 70% 40%)"></span>
+      <span class="sw" style="background:hsl(45 80% 55%)"></span>
+      <span>more</span>
     </div>
-    <p id="empty" class="empty" hidden>
-      No birds recorded for this week yet. Once the watcher captures some,
-      they'll show up here.
-    </p>
+    <p id="empty" class="empty" hidden>No birds recorded this week yet — the watcher's listening.</p>
   </main>
 
-  <!-- lightbox for a day's captures -->
   <div id="lightbox" class="lightbox" hidden>
     <div class="lightbox-inner">
-      <button id="lb-close" class="lb-close">×</button>
-      <h3 id="lb-title"></h3>
-      <div id="lb-body" class="lb-body"></div>
+      <button id="lb-close" class="lb-close" aria-label="close">×</button>
+      <div id="lb-body"></div>
     </div>
   </div>
 

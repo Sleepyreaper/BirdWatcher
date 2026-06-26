@@ -11,6 +11,11 @@ data/*.err
 # models
 *.pt
 
+# downloaded reference images (regenerate via tools/fetch_reference_images.py)
+assets/reference/
+assets/_mock_*.txt
+assets/*.log
+
 # python
 __pycache__/
 *.py[cod]

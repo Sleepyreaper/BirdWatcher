@@ -1,161 +1,136 @@
-// BirdWatcher weekly grid — fetches /api/week and renders the heat-quilt.
+// BirdWatcher weekly grid — reference photos on rows, deduped visit counts.
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-let currentStart = null; // ISO date string of the week's Sunday
+let currentStart = null;
 
-// A stable hue per species so each row reads like its own color in the quilt.
+// stable hue per species so the grid reads like a quilt
 function hueFor(name) {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
   return h;
 }
-
-// Count -> lightness bucket. More sightings = more saturated/brighter square.
 function cellColor(name, count) {
-  if (count === 0) return null;
+  if (!count) return null;
   const hue = hueFor(name);
-  const bucket = count >= 10 ? 4 : count >= 6 ? 3 : count >= 3 ? 2 : 1;
-  const light = [0, 26, 36, 48, 62][bucket];
-  const sat = [0, 55, 62, 70, 80][bucket];
+  const b = count >= 10 ? 4 : count >= 6 ? 3 : count >= 3 ? 2 : 1;
+  const light = [0, 26, 34, 44, 56][b];
+  const sat = [0, 55, 64, 72, 82][b];
   return `hsl(${hue} ${sat}% ${light}%)`;
+}
+
+function el(tag, cls, html) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+}
+function fmt(iso) {
+  return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 async function loadWeek(start) {
   const url = start ? `/api/week?start=${start}` : "/api/week";
-  const res = await fetch(url);
-  const data = await res.json();
-  currentStart = data.start;
-  render(data);
+  const d = await (await fetch(url)).json();
+  currentStart = d.start;
+  render(d);
 }
 
-function render(data) {
-  const grid = document.getElementById("grid");
-  const empty = document.getElementById("empty");
-  grid.innerHTML = "";
-
-  const todayIso = new Date().toISOString().slice(0, 10);
-
-  // label
-  const startD = new Date(data.start + "T00:00:00");
-  const endD = new Date(data.days[6] + "T00:00:00");
+function render(d) {
+  document.getElementById("region").textContent =
+    `${d.region.name || ""} · week of ${fmt(d.days[0])} – ${fmt(d.days[6])}`;
   document.getElementById("weeklabel").textContent =
-    `${fmt(startD)} – ${fmt(endD)}` + (data.is_current ? "  (this week)" : "");
+    d.is_current ? "This week" : `${fmt(d.days[0])} – ${fmt(d.days[6])}`;
 
-  // header row
-  const head = document.createElement("div");
-  head.className = "row head";
-  head.appendChild(div("species", "<span class='name'>Species</span>"));
-  data.days.forEach((iso, i) => {
-    const d = new Date(iso + "T00:00:00");
-    head.appendChild(div("daycol", `${DAYS[i]}<span class='dnum'>${d.getDate()}</span>`));
+  const s = document.getElementById("stats");
+  s.innerHTML = "";
+  s.append(
+    stat(d.stats.visits, "Visits this week"),
+    stat(d.stats.species_seen, "Species seen"),
+    stat(d.stats.on_list, "On your list"),
+    stat(d.stats.busiest_day, "Busiest day"),
+  );
+
+  const g = document.getElementById("grid");
+  g.innerHTML = "";
+  const today = new Date().toISOString().slice(0, 10);
+
+  const head = el("div", "row head");
+  head.append(el("div", "species", `<span class="hlabel">Species</span>`));
+  d.days.forEach((iso, i) => {
+    const dt = new Date(iso + "T00:00:00");
+    head.append(el("div", "daycol" + (iso === today ? " today" : ""),
+      `${DAYS[i]}<span class="dnum">${dt.getDate()}</span>`));
   });
-  grid.appendChild(head);
+  g.append(head);
 
-  // stats
-  renderStats(data);
+  document.getElementById("empty").hidden = d.seen.length > 0;
+  d.seen.forEach((sp) => g.append(seenRow(sp, d, today)));
 
-  empty.hidden = data.species.length > 0;
-
-  // species rows
-  for (const sp of data.species) {
-    const row = document.createElement("div");
-    row.className = "row";
-
-    const thumb = sp.thumb
-      ? `<img src="/captures/${sp.thumb}" alt="${sp.name}" loading="lazy"/>`
-      : `<div class="noimg">🐦</div>`;
-    row.appendChild(div("species",
-      `${thumb}<div><div class="name">${sp.name}</div>` +
-      `<div class="tot">${sp.total} this week</div></div>`));
-
-    sp.counts.forEach((count, i) => {
-      const cell = document.createElement("div");
-      cell.className = "cell" + (count ? " has" : "") +
-        (data.days[i] === todayIso ? " today" : "");
-      const color = cellColor(sp.name, count);
-      if (color) cell.style.background = color;
-      if (count) {
-        cell.textContent = count;
-        const times = sp.times[i] || [];
-        cell.title = `${sp.name} — ${data.days[i]}\n${count} visit(s)` +
-          (times.length ? `\n${times.join(", ")}` : "");
-        cell.onclick = () => openLightbox(sp, i, data.days[i]);
-      }
-      row.appendChild(cell);
-    });
-
-    grid.appendChild(row);
+  const expected = d.catalog.filter((c) => !c.seen);
+  if (expected.length) {
+    g.append(el("div", "divider", `on your Cole's Special Feeder list · not seen this week`));
+    expected.forEach((sp) => g.append(expectedRow(sp)));
   }
 }
 
-function renderStats(data) {
-  const total = data.species.reduce((a, s) => a + s.total, 0);
-  const distinct = data.species.length;
-  // busiest day across all species
-  const perDay = [0, 0, 0, 0, 0, 0, 0];
-  data.species.forEach((s) => s.counts.forEach((c, i) => (perDay[i] += c)));
-  const busiestIdx = perDay.indexOf(Math.max(...perDay));
-  const rarest = data.species.length
-    ? data.species.reduce((a, b) => (b.total < a.total ? b : a))
-    : null;
-
-  const el = document.getElementById("stats");
-  el.innerHTML = "";
-  el.appendChild(stat(total, "Total visits"));
-  el.appendChild(stat(distinct, "Species"));
-  el.appendChild(stat(total ? DAYS[busiestIdx] : "—", "Busiest day"));
-  el.appendChild(stat(rarest && total ? rarest.name : "—", "Rarest visitor"));
+function avatar(ref) {
+  return ref ? `<img class="av" src="${ref}" alt="" loading="lazy">` : `<div class="av ph">🐦</div>`;
 }
 
-function openLightbox(sp, dayIdx, dayIso) {
-  const lb = document.getElementById("lightbox");
-  document.getElementById("lb-title").textContent = `${sp.name} — ${dayIso}`;
+function seenRow(sp, d, today) {
+  const row = el("div", "row");
+  const sub = `${sp.total} visit${sp.total === 1 ? "" : "s"}` + (sp.scientific ? ` · ${sp.scientific}` : "");
+  row.append(el("div", "species",
+    `${avatar(sp.reference)}<div class="meta"><div class="name">${sp.name}</div><div class="sub">${sub}</div></div>`));
+  sp.counts.forEach((c, i) => {
+    const cell = el("div", "cell" + (c ? " has" : "") + (d.days[i] === today ? " today" : ""));
+    const col = cellColor(sp.name, c);
+    if (col) cell.style.background = col;
+    if (c) {
+      cell.textContent = c;
+      cell.title = `${sp.name} — ${d.days[i]}\n${c} visit(s)\n${(sp.times[i] || []).join(", ")}`;
+      cell.onclick = () => openDetail(sp, i, d.days[i]);
+    }
+    row.append(cell);
+  });
+  return row;
+}
+
+function expectedRow(sp) {
+  const row = el("div", "row dim");
+  row.append(el("div", "species",
+    `${avatar(sp.reference)}<div class="meta"><div class="name">${sp.name}</div><div class="sub">expected</div></div>`));
+  for (let i = 0; i < 7; i++) row.append(el("div", "cell"));
+  return row;
+}
+
+function openDetail(sp, dayIdx, dayIso) {
   const body = document.getElementById("lb-body");
-  body.innerHTML = "";
+  const ref = sp.reference ? `<figure><img src="${sp.reference}"><figcaption>field guide</figcaption></figure>` : "";
+  const cap = sp.thumb ? `<figure><img src="/captures/${sp.thumb}"><figcaption>best frame caught</figcaption></figure>` : "";
   const times = sp.times[dayIdx] || [];
-  // We only kept the best thumbnail per species in the payload; show it +
-  // the list of times seen that day. (A future API can return all crops.)
-  if (sp.thumb) {
-    const fig = document.createElement("figure");
-    fig.innerHTML =
-      `<img src="/captures/${sp.thumb}" alt="${sp.name}"/>` +
-      `<figcaption>best capture</figcaption>`;
-    body.appendChild(fig);
-  }
-  const list = document.createElement("div");
-  list.innerHTML = `<p>Seen at: ${times.join(", ") || "—"}</p>`;
-  body.appendChild(list);
-  lb.hidden = false;
+  body.innerHTML =
+    `<h3>${sp.name}</h3>` +
+    `<div class="sci">${[sp.scientific, sp.family].filter(Boolean).join(" · ")}</div>` +
+    `<div class="shots">${ref}${cap}</div>` +
+    (cap ? `<div class="note">best frame kept from the visit; blurrier ones discarded</div>` : "") +
+    `<div class="kv"><span>${dayIso}</span><span>${times.length} visit(s)${times.length ? " · " + times.join(", ") : ""}</span></div>`;
+  document.getElementById("lightbox").hidden = false;
 }
 
-// helpers
-function div(cls, html) {
-  const d = document.createElement("div");
-  d.className = cls;
-  d.innerHTML = html;
-  return d;
-}
-function stat(num, lbl) {
-  return div("stat", `<div class="num">${num}</div><div class="lbl">${lbl}</div>`);
-}
-function fmt(d) {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+function stat(n, l) {
+  return el("div", "stat", `<div class="num">${n}</div><div class="lbl">${l}</div>`);
 }
 
-// nav
 document.getElementById("prev").onclick = () => shift(-7);
 document.getElementById("next").onclick = () => shift(7);
 document.getElementById("today").onclick = () => loadWeek(null);
-document.getElementById("lb-close").onclick = () =>
-  (document.getElementById("lightbox").hidden = true);
-document.getElementById("lightbox").onclick = (e) => {
-  if (e.target.id === "lightbox") e.target.hidden = true;
-};
-
+document.getElementById("lb-close").onclick = () => (document.getElementById("lightbox").hidden = true);
+document.getElementById("lightbox").onclick = (e) => { if (e.target.id === "lightbox") e.target.hidden = true; };
 function shift(days) {
-  const d = new Date(currentStart + "T00:00:00");
-  d.setDate(d.getDate() + days);
-  loadWeek(d.toISOString().slice(0, 10));
+  const dt = new Date(currentStart + "T00:00:00");
+  dt.setDate(dt.getDate() + days);
+  loadWeek(dt.toISOString().slice(0, 10));
 }
 
 loadWeek(null);

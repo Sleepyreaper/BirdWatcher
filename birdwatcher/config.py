@@ -67,10 +67,13 @@ class ClassifierConfig:
 
 @dataclass
 class PipelineConfig:
-    # Collapse repeat sightings of the same species within this many seconds
-    # into a single "visit" so counts mean visits, not frames.
-    visit_cooldown: float = 60.0
-    # Save the cropped bird image for each recorded visit.
+    # A visit stays open while the same bird (matched across frames by box overlap)
+    # keeps being seen. It closes after this many seconds with no sighting; then we
+    # record ONE row with the best frame. Counts therefore mean visits, not frames.
+    visit_timeout: float = 60.0
+    # Ignore blips: only record a visit seen in at least this many frames.
+    min_visit_frames: int = 2
+    # Save the single best cropped bird image per visit.
     save_crops: bool = True
 
 

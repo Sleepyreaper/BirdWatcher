@@ -103,6 +103,8 @@ class RTSPCamera:
                     break
                 if self.gate.is_active(frame):
                     yield frame
+                else:
+                    yield None  # heartbeat: lets the pipeline close idle visits
 
             self._cap.release()
             time.sleep(self.cam.reconnect_delay)

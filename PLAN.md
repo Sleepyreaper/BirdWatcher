@@ -165,18 +165,24 @@ BirdWatcher/
    `audio_detections` table. Correlate with visual sightings: 🔊 confirm badge when
    *seen* and *heard* agree, plus a "heard nearby" soundscape layer for birds that never
    land. Caveats: TFLite on Py 3.14 may need its own env; wind noise hurts accuracy.
-7. **M7 – Host it (Azure + wall display):** hybrid topology — a small always-on **edge
-   device** on the LAN runs capture + detect and pushes results (crops → Blob, metadata →
-   API) outbound over HTTPS into its own **`rg-birdwatcher`** resource group (Container
-   App web/API, Postgres, Blob, Key Vault). A wall screen in kiosk mode loads the
-   dashboard. Solves "computer on all the time." Protect the ingest endpoint with a key.
+7. **M7 – Host it (self-hosted Pi appliance — CHOSEN):** run the whole stack (capture +
+   detect + classify + SQLite + web) on a **Raspberry Pi 4 B / 8 GB** on the home LAN —
+   no cloud. Wall screen + phones load `http://<pi-ip>:8000` (bind web host to `0.0.0.0`).
+   Free, private, sits right next to the camera. To-dos: storage ≥64 GB or **boot from a
+   USB SSD** (the 8 GB SD is too small + wears out under 24/7 writes); feed the Pi the
+   **1080** stream (Pi 4 H.264 hw-decode caps ~1080p); export YOLO to **NCNN** for a few
+   FPS; `systemd` unit so it survives reboots. *Azure hybrid (Container App + Postgres +
+   Blob, edge pushes results) stays the fallback only if public/remote access is ever
+   needed — and a free Tailscale tunnel to the Pi would cover remote without Azure.*
 
 ## Open questions / decisions
 
-- **Species backend (M4):** TF-Hub (local) vs **Claude vision** (API, cloud-ready, avoids
-  the Python-3.14 TF gap — current lean). ← still to confirm.
-- Keep every crop, or only the best crop per visit (saves disk / Blob cost)?
-- **Resolution: chosen — High / 4MP** for best ID crops (step down to 1080 if we move to a
-  low-power edge box in M7).
-- Run the watcher as a background **service** (Task Scheduler / NSSM) so it survives
-  reboots — relevant locally now and for the M7 edge device.
+- **Deployment target: DECIDED — self-hosted Raspberry Pi 4 B (8 GB), home LAN only, no
+  cloud** (see M7). Prereq: bigger / SSD storage before migrating off the desktop.
+- **Species backend (M4):** still to confirm — fully-offline **local TFLite/ONNX** model on
+  the Pi vs a **cloud vision API** (GPT-4o / Claude, needs internet). TF/TF-Hub still lacks
+  Python 3.14 wheels, so a local model would run via TFLite/ONNX or a separate 3.12 env.
+- Keep every crop, or only the best crop per visit (saves SD/SSD space)?
+- **Resolution:** High / 4 MP for desktop testing now; **use 1080 on the Pi** (decode limit).
+- Background **service**: `systemd` on the Pi so the watcher + web auto-start and survive
+  reboots.
