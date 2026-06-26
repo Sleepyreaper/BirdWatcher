@@ -36,7 +36,7 @@ def cmd_web(args) -> None:
 
     cfg = load_config(args.config)
     app = create_app(cfg)
-    print(f"BirdWatcher UI → http://{cfg.web.host}:{cfg.web.port}")
+    print(f"BirdWatcher UI -> http://{cfg.web.host}:{cfg.web.port}")
     app.run(host=cfg.web.host, port=cfg.web.port, debug=cfg.web.debug)
 
 
@@ -82,7 +82,7 @@ def cmd_test(args) -> None:
     from birdwatcher.capture import RTSPCamera
 
     cfg = load_config(args.config)
-    print(f"Connecting to {cfg.camera.rtsp_url} …")
+    print(f"Connecting to {cfg.camera.rtsp_url} ...")
     cam = RTSPCamera(cfg.camera, cfg.motion)
     frame = cam.grab_one()
     if frame is None:

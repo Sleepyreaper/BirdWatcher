@@ -48,7 +48,7 @@ def create_app(cfg: Config | None = None) -> Flask:
 def main() -> None:
     cfg = load_config()
     app = create_app(cfg)
-    print(f"BirdWatcher UI → http://{cfg.web.host}:{cfg.web.port}")
+    print(f"BirdWatcher UI -> http://{cfg.web.host}:{cfg.web.port}")
     app.run(host=cfg.web.host, port=cfg.web.port, debug=cfg.web.debug)
 
 

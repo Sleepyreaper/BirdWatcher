@@ -143,22 +143,40 @@ BirdWatcher/
 
 1. Open **UniFi Protect** → **Settings → System** (or the camera's settings) → enable **RTSP**.
 2. On the camera, toggle on a stream quality (High/Medium/Low) under **RTSP**.
-3. Protect gives a URL like `rtsp://<NVR-IP>:7447/<streamId>` — paste it into `config.yaml`.
+3. Modern Protect gives an RTSPS URL like `rtsps://<NVR-IP>:7441/<streamId>?enableSrtp` — paste it into `config.yaml`.
 4. Lower resolution stream = less CPU for motion/detection; High = better species crops.
    Medium is usually the sweet spot for a feeder.
 
 ## Build order (milestones)
 
-1. **M1 – Plumbing (this PR):** repo, config, DB, pluggable interfaces, `stub` classifier,
-   web UI rendering from whatever rows exist. Runs end-to-end with fake data.
-2. **M2 – See the stream:** `capture.py` connects to your real RTSP URL, motion gate tuned.
-3. **M3 – Detect birds:** wire YOLO, confirm it crops birds at the feeder.
-4. **M4 – Name them:** enable TF-Hub classifier; review accuracy on your local birds.
-5. **M5 – Polish:** debounce tuning, Claude fallback for low-confidence, week navigation,
-   lightbox, daily email/summary (optional).
+1. **M1 – Plumbing:** ✅ repo, config, DB, pluggable interfaces, `stub` classifier,
+   web UI. Runs end-to-end with seed data.
+2. **M2 – See the stream:** ✅ RTSPS (TLS + SRTP) connects; `run.py test` grabs a frame.
+   Camera set to **High = 2688×1512 (4MP)** for maximum detail on distant birds.
+3. **M3 – Detect birds:** ✅ YOLO (`ultralytics`, installs cleanly on Python 3.14) wired
+   into the watch loop; capturing live with `stub` labels.
+4. **M4 – Name them:** ▶ pick a species backend and review accuracy. Note: TensorFlow /
+   TF-Hub has no Python 3.14 wheels yet → **leaning Claude-vision backend** (also
+   cloud-friendly), or run TF in a separate Python 3.12 env.
+5. **M5 – Polish:** debounce tuning, low-confidence Claude fallback, week nav, lightbox,
+   optional daily summary.
+6. **M6 – Hear them (audio / BirdNET):** parallel acoustic pipeline — pull the camera's
+   48 kHz audio track (ffmpeg/PyAV) → BirdNET (`birdnetlib`, location + date aware) →
+   `audio_detections` table. Correlate with visual sightings: 🔊 confirm badge when
+   *seen* and *heard* agree, plus a "heard nearby" soundscape layer for birds that never
+   land. Caveats: TFLite on Py 3.14 may need its own env; wind noise hurts accuracy.
+7. **M7 – Host it (Azure + wall display):** hybrid topology — a small always-on **edge
+   device** on the LAN runs capture + detect and pushes results (crops → Blob, metadata →
+   API) outbound over HTTPS into its own **`rg-birdwatcher`** resource group (Container
+   App web/API, Postgres, Blob, Key Vault). A wall screen in kiosk mode loads the
+   dashboard. Solves "computer on all the time." Protect the ingest endpoint with a key.
 
-## Open questions for you
+## Open questions / decisions
 
-- Which species backend do you want as default — fully-local TF-Hub, or Claude vision?
-- Keep every crop, or only the single best crop per visit (saves disk)?
-- Run the watcher as a background service (Windows Task Scheduler / NSSM) eventually?
+- **Species backend (M4):** TF-Hub (local) vs **Claude vision** (API, cloud-ready, avoids
+  the Python-3.14 TF gap — current lean). ← still to confirm.
+- Keep every crop, or only the best crop per visit (saves disk / Blob cost)?
+- **Resolution: chosen — High / 4MP** for best ID crops (step down to 1080 if we move to a
+  low-power edge box in M7).
+- Run the watcher as a background **service** (Task Scheduler / NSSM) so it survives
+  reboots — relevant locally now and for the M7 edge device.
