@@ -1,0 +1,21 @@
+# local secrets / config
+config.yaml
+
+# runtime data
+data/birdwatcher.db
+data/captures/
+*.db
+
+# models
+*.pt
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# os
+.DS_Store
+Thumbs.db

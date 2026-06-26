@@ -1,0 +1,16 @@
+# --- core (always needed) ---
+flask>=3.0
+pyyaml>=6.0
+
+# --- capture + detection (milestones M2-M3) ---
+opencv-python>=4.9
+numpy>=1.26
+ultralytics>=8.1            # YOLO bird detector (auto-downloads yolov8n.pt)
+
+# --- species ID, pick ONE backend (milestone M4) ---
+# tfhub backend (local, ~964 species):
+# tensorflow>=2.15
+# tensorflow-hub>=0.16
+#
+# claude backend (API, needs ANTHROPIC_API_KEY):
+# anthropic>=0.40

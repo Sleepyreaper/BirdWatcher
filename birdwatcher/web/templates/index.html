@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BirdWatcher 🐦</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🐦 BirdWatcher</h1>
+    <div class="weeknav">
+      <button id="prev" title="Previous week">‹</button>
+      <span id="weeklabel">Loading…</span>
+      <button id="next" title="Next week">›</button>
+      <button id="today" class="ghost">This week</button>
+    </div>
+  </header>
+
+  <section id="stats" class="stats"></section>
+
+  <main class="gridwrap">
+    <div id="grid" class="grid">
+      <!-- header row + species rows injected by app.js -->
+    </div>
+    <p id="empty" class="empty" hidden>
+      No birds recorded for this week yet. Once the watcher captures some,
+      they'll show up here.
+    </p>
+  </main>
+
+  <!-- lightbox for a day's captures -->
+  <div id="lightbox" class="lightbox" hidden>
+    <div class="lightbox-inner">
+      <button id="lb-close" class="lb-close">×</button>
+      <h3 id="lb-title"></h3>
+      <div id="lb-body" class="lb-body"></div>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

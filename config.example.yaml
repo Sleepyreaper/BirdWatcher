@@ -1,0 +1,39 @@
+# Copy this to config.yaml and fill in your camera's RTSP URL.
+# (config.yaml is git-ignored so your URL stays private.)
+
+camera:
+  # From UniFi Protect: Settings -> enable RTSP on the camera, copy its URL.
+  # You can also set the RTSP_URL environment variable instead of putting it here.
+  rtsp_url: "rtsp://192.168.1.1:7447/CHANGE_ME"
+  use_tcp: true
+  reconnect_delay: 5.0
+
+motion:
+  enabled: true
+  min_area_frac: 0.003      # raise if wind/leaves cause false triggers
+  var_threshold: 40
+  active_window: 4.0
+
+detector:
+  model: "yolov8n.pt"       # n=fast, s/m=more accurate
+  min_confidence: 0.35
+  crop_pad_frac: 0.15
+
+classifier:
+  backend: "stub"           # "stub" | "tfhub" | "claude"
+  min_confidence: 0.25
+  tfhub_handle: "https://tfhub.dev/google/aiy/vision/classifier/birds_V1/1"
+  claude_model: "claude-opus-4-8"
+
+pipeline:
+  visit_cooldown: 60.0      # seconds; collapse repeats into one visit
+  save_crops: true
+
+web:
+  host: "127.0.0.1"
+  port: 8000
+  debug: false
+
+paths:
+  db: "data/birdwatcher.db"
+  captures: "data/captures"
