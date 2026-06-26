@@ -55,11 +55,36 @@ class RTSPCamera:
         self._cap = None
 
     def _open(self):
+        # FFmpeg options. rtsps:// is RTSP-over-TLS and still runs over TCP, so
+        # forcing TCP transport is the reliable default. stimeout (microseconds)
+        # makes a bad connection fail fast instead of hanging forever.
+        opts = []
         if self.cam.use_tcp:
-            os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+            opts.append("rtsp_transport;tcp")
+        opts.append("stimeout;5000000")
+        os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "|".join(opts)
         cap = cv2.VideoCapture(self.cam.rtsp_url, cv2.CAP_FFMPEG)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # always read the freshest frame
         return cap
+
+    def grab_one(self, warmup: int = 10):
+        """Open the stream and return one fresh frame (or None).
+
+        Reads a few frames first so the decoder can sync. Used by `run.py test`
+        to verify the camera without starting the full pipeline.
+        """
+        cap = self._open()
+        try:
+            if not cap.isOpened():
+                return None
+            frame = None
+            for _ in range(max(1, warmup)):
+                ok, f = cap.read()
+                if ok and f is not None:
+                    frame = f
+            return frame
+        finally:
+            cap.release()
 
     def frames(self) -> Iterator["np.ndarray"]:
         """Yield frames that pass the motion gate; reconnect on failure forever."""

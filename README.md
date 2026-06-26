@@ -30,6 +30,7 @@ python run.py web         # open http://127.0.0.1:8000
 | Command | What it does |
 |---------|--------------|
 | `python run.py initdb` | Create the SQLite database |
+| `python run.py test`   | Grab one frame from the RTSP camera to verify the connection |
 | `python run.py seed`   | Insert fake sightings to preview the UI |
 | `python run.py watch`  | Run the capture/detect/classify pipeline |
 | `python run.py web`    | Serve the weekly web UI |

@@ -70,13 +70,39 @@ def cmd_seed(args) -> None:
     print(f"Seeded {n} fake sightings for the current week. Run `python run.py web`.")
 
 
+def cmd_test(args) -> None:
+    """Connect to the RTSP stream and save one frame, to verify the camera."""
+    try:
+        import cv2
+    except ImportError:
+        print("opencv-python not installed. Run: pip install opencv-python numpy")
+        return
+    from datetime import datetime
+
+    from birdwatcher.capture import RTSPCamera
+
+    cfg = load_config(args.config)
+    print(f"Connecting to {cfg.camera.rtsp_url} …")
+    cam = RTSPCamera(cfg.camera, cfg.motion)
+    frame = cam.grab_one()
+    if frame is None:
+        print("FAILED: no frame received. Check the URL / that RTSP is enabled, "
+              "and try dropping '?enableSrtp' (SRTP is often unsupported by FFmpeg).")
+        return
+    out = cfg.paths.captures_path() / f"_test_{datetime.now():%H%M%S}.jpg"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(out), frame)
+    h, w = frame.shape[:2]
+    print(f"OK: received {w}x{h} frame, saved {out}")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="BirdWatcher")
     parser.add_argument("-c", "--config", default=None, help="path to config.yaml")
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, fn in [
         ("initdb", cmd_initdb), ("watch", cmd_watch),
-        ("web", cmd_web), ("seed", cmd_seed),
+        ("web", cmd_web), ("seed", cmd_seed), ("test", cmd_test),
     ]:
         p = sub.add_parser(name)
         p.set_defaults(func=fn)

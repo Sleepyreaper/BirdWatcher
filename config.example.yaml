@@ -2,9 +2,12 @@
 # (config.yaml is git-ignored so your URL stays private.)
 
 camera:
-  # From UniFi Protect: Settings -> enable RTSP on the camera, copy its URL.
-  # You can also set the RTSP_URL environment variable instead of putting it here.
-  rtsp_url: "rtsp://192.168.1.1:7447/CHANGE_ME"
+  # From UniFi Protect: open the camera -> enable RTSP, copy its URL.
+  # Modern Protect gives an RTSPS (TLS) URL on port 7441, e.g.
+  #   rtsps://192.168.1.1:7441/<streamId>?enableSrtp
+  # If a stream with "?enableSrtp" won't open, drop that suffix — FFmpeg/OpenCV
+  # often can't decode SRTP. You can also set the RTSP_URL env var instead.
+  rtsp_url: "rtsps://192.168.1.1:7441/CHANGE_ME"
   use_tcp: true
   reconnect_delay: 5.0
 
