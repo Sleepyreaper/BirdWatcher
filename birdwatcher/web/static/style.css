@@ -58,7 +58,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .species .sub { font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .cell {
-  aspect-ratio: 1 / 1; max-width: 56px; border-radius: 7px;
+  aspect-ratio: 1 / 1; max-width: 56px; margin: 0 auto; border-radius: 7px;
   background: var(--panel-2); border: 1px solid var(--line);
   display: grid; place-items: center; font-size: .82rem; font-weight: 600; color: #06210b;
   transition: transform .08s ease;
