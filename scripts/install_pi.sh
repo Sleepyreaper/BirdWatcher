@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 echo "[1/5] system packages (ffmpeg for RTSP, BLAS for numpy/torch)…"
 sudo apt-get update
-sudo apt-get install -y python3-venv python3-pip ffmpeg libatlas-base-dev
+sudo apt-get install -y python3-venv python3-pip ffmpeg libopenblas-dev
 
 echo "[2/5] python venv + dependencies (torch can take several minutes)…"
 python3 -m venv .venv
