@@ -1,188 +1,163 @@
-# 🐦 BirdWatcher — Project Plan
+# 🐦 BirdWatcher — Project Plan & Architecture
 
-Capture birds at your feeder from a UniFi camera over RTSP, identify the species,
-and visualize the week (Sun–Sat) in a local web UI.
+Capture birds at your feeder, identify them by **sight** (camera) and **sound**
+(microphone), and visualize the week (Sun–Sat) in a local web dashboard that
+cross-correlates the two.
 
 ## Goal
 
-> Point a UniFi camera at the birdfeeder → automatically capture birds → identify
-> the species → show a weekly grid where each species is a row and colored squares
-> show how often we saw it per day.
+> Point a camera at the birdfeeder → automatically catch + identify the birds that
+> land, *and* the birds you can hear → show a weekly grid: who was **seen**, who was
+> **heard**, and who was **both** (🔊 confirmed at the feeder).
 
 ## Architecture
 
 ```
-                ┌──────────────────────────────────────────────────────────┐
-   UniFi cam    │                    capture worker (run.py watch)          │
-  ───RTSP──────▶│                                                           │
-                │  capture.py        detector.py        classifier.py       │
-                │  ┌──────────┐      ┌──────────┐       ┌───────────────┐    │
-                │  │ RTSP read│─────▶│  YOLO    │──────▶│ species ID     │    │
-                │  │ + motion │frame │ "is there│ crop  │ (TF-Hub birds  │    │
-                │  │ gate     │      │  a bird?"│       │  or Claude)    │    │
-                │  └──────────┘      └──────────┘       └───────┬───────┘    │
-                │                                               │            │
-                │                          database.py  ◀───────┘            │
-                │                          (SQLite + saved crop image)       │
-                └───────────────────────────────┬──────────────────────────┘
-                                                 │
-                                       ┌─────────▼─────────┐
-                                       │  web/app.py       │   run.py web
-                                       │  Flask + JS UI    │──▶ http://localhost:8000
-                                       │  weekly heat-grid │
-                                       └───────────────────┘
+                        ┌─ run.py watch ──────────────────────────────┐
+                        │  capture → YOLO detect → BioCLIP species     │
+   camera ──RTSP──▶ go2rtc │  → visit tracking (best frame) → SQLite   │
+   (video + audio)      │                                              │
+                        └─ BirdNET-Go (Docker) ── acoustic ID → its SQLite
+                                       │                    │
+                                       ▼                    ▼
+                        run.py web ── reads BOTH ── weekly dashboard (:8000)
+                                       seen · heard · 🔊 confirmed
 ```
 
-Two independent processes share one SQLite DB + image folder:
-1. **`watch`** — long-running worker: RTSP → motion gate → bird detect → classify → store.
-2. **`web`** — Flask server rendering the weekly grid from the DB.
+**go2rtc** is the keystone: it maintains a single connection to the camera and
+re-serves it locally (`rtsp://127.0.0.1:8554/birdcam`). Every consumer reads from
+go2rtc, so (a) the flaky camera link is held in one place, (b) the watcher and
+BirdNET-Go share one camera connection, and (c) **swapping cameras is one line.**
 
-## Pipeline stages
+Independent processes, each a systemd service on the Pi:
+- **`go2rtc`** — camera restreamer.
+- **`watch`** — visual pipeline → SQLite (`sightings`, one row per visit).
+- **BirdNET-Go** — acoustic pipeline → its own SQLite (`detections` + `labels`).
+- **`web`** — Flask dashboard, reads the visual DB + (read-only) BirdNET-Go's DB.
+
+## Visual pipeline stages
 
 | Stage | File | What it does | Tech |
 |-------|------|--------------|------|
-| 1. Stream | `capture.py` | Read RTSP with auto-reconnect | OpenCV `VideoCapture` |
-| 2. Motion gate | `capture.py` | Only run detection when pixels change (saves CPU) | MOG2 background subtraction |
-| 3. Bird detect | `detector.py` | "Is there a bird, and where?" → crop bounding box | Ultralytics YOLO (COCO `bird` class) |
-| 4. Species ID | `classifier.py` | Name the bird from the crop | TF-Hub `aiy/birds_V1` (~960 species, local) **or** Claude vision |
-| 5. Store | `database.py` | One row per sighting + saved crop thumbnail | SQLite |
-| 6. Visualize | `web/` | Weekly Sun–Sat grid, species rows, colored count squares | Flask + vanilla JS |
+| 1. Stream | `capture.py` | Read RTSP (from go2rtc) with auto-reconnect | OpenCV `VideoCapture` |
+| 2. Motion gate | `capture.py` | Only run detection when pixels change | MOG2 background subtraction |
+| 3. Bird detect | `detector.py` | "Is there a bird, and where?" → padded crop | Ultralytics YOLO (COCO `bird`) |
+| 4. Visit tracking | `pipeline.py` | Match a bird across frames (box IoU) into one **visit**; keep the sharpest crop (Laplacian × detector conf) | custom |
+| 5. Species ID | `classifier.py` | Name the *best* crop once per visit | **BioCLIP** (local, default) / Claude / stub |
+| 6. Store | `database.py` | One row per visit (best frame, first/last seen, frames) | SQLite |
+| 7. Visualize | `web/` | Weekly grid + audio overlay | Flask + vanilla JS |
 
-### Why this split?
-- **Motion gate before YOLO** — a feeder is empty most of the time. Running YOLO on
-  every frame wastes power; the motion gate keeps it idle until something moves.
-- **Detect before classify** — YOLO cheaply rejects squirrels/leaves and crops tightly
-  so the species classifier sees a clean bird, not a whole yard.
-- **Debounce** — the same bird sits for many frames. We collapse sightings of the same
-  species within a cooldown window (default 60s) into one "visit" so counts mean visits,
-  not frames.
+### Key design choices
+- **Motion gate before YOLO** — a feeder is empty most of the time; stay idle until something moves.
+- **Track into visits** — a bird sits for many frames. We match detections across frames
+  by bounding-box overlap, collapse them into **one visit**, and classify only the
+  **sharpest** frame (so the classifier runs once per visit, not per frame, and counts
+  mean visits, not frames). Two birds at different ports = two visits.
+- **Constrain to a local catalog** — `data/species_catalog.json` (Cobb County / Cole's
+  Special Feeder, 32 species) is both the classifier's whitelist *and* the source of
+  reference photos. Massively improves accuracy (e.g. Carolina vs. Black-capped Chickadee).
 
-## Species identification options (pluggable)
+## Species identification (pluggable)
 
-`classifier.py` exposes a `SpeciesClassifier` interface so you can swap backends in config:
+`classifier.py` exposes a `SpeciesClassifier` interface; pick via `classifier.backend`:
 
-- **`tfhub`** (default, fully local, free): Google's `aiy/vision/classifier/birds_V1`
-  — recognizes ~964 bird species, returns a label + confidence. No internet, no API key.
-- **`claude`** (optional, best accuracy, costs API tokens): sends the crop to Claude vision
-  and asks for the species. Good fallback when TF-Hub is unsure.
-- **`stub`** (for wiring/testing without ML deps installed): labels everything "Unknown bird".
+- **`bioclip`** (default) — local **BioCLIP** (`open_clip`, `hf-hub:imageomics/bioclip`),
+  zero-shot against the catalog's common names. No API key, fully offline → fits the Pi.
+- **`claude`** — Claude vision; needs `ANTHROPIC_API_KEY`.
+- **`tfhub`** — Google `aiy/birds_V1`; needs TensorFlow (no Python 3.14 wheels).
+- **`stub`** — labels everything "Unknown bird" (wiring tests).
 
-## Data model (SQLite)
+## Acoustic pipeline (BirdNET-Go)
+
+Rather than build our own audio worker, we run **BirdNET-Go** (a mature Go BirdNET):
+continuous, efficient, location/date aware, own UI + SQLite + clip storage. We read its
+DB read-only and map detections onto our catalog:
+
+- BirdNET-Go schema: `detections(detected_at INTEGER epoch, confidence, label_id, …)`
+  joined to `labels(id, scientific_name)`. Note: **only scientific names** — we map
+  them to our catalog (which has both), which also filters to our species for free.
+- `birdwatcher/birdnetgo.py` opens it `mode=ro` (never locks BirdNET-Go's writes); any
+  error → empty result, so the audio layer simply doesn't appear.
+
+## Data model
 
 ```sql
+-- our visual visits (birdwatcher.db)
 CREATE TABLE sightings (
-    id           INTEGER PRIMARY KEY,
-    ts           TEXT NOT NULL,        -- ISO8601 local time
-    species      TEXT NOT NULL,        -- e.g. "Northern Cardinal"
-    confidence   REAL NOT NULL,        -- 0..1
-    image_path   TEXT NOT NULL,        -- data/captures/2026-06-25/cardinal_1432.jpg
-    detector_conf REAL                 -- YOLO bird confidence
+    id INTEGER PRIMARY KEY, ts TEXT,        -- visit start (local ISO8601)
+    species TEXT, confidence REAL,          -- classifier label + conf
+    image_path TEXT, detector_conf REAL,    -- best crop + YOLO conf
+    last_ts TEXT, frames INTEGER            -- visit end + frames seen
 );
-CREATE INDEX idx_sightings_ts ON sightings(ts);
-CREATE INDEX idx_sightings_species ON sightings(species);
 ```
+Audio lives in BirdNET-Go's own `birdnet.db` (read-only to us). The dashboard merges
+the two at query time — nothing is copied.
 
-## Web UI design
+## Web UI
 
-A **GitHub-contributions-style heat grid**, but for birds:
+A GitHub-contributions-style heat-grid: species are rows (reference photo + name on
+the left), each day a colored square whose intensity = visit count, each species its
+own hue (a "quilt"). Plus the acoustic overlay:
 
-```
-              Sun   Mon   Tue   Wed   Thu   Fri   Sat
-  ┌────────┐  ┌─┐   ┌─┐   ┌─┐   ┌─┐   ┌─┐   ┌─┐   ┌─┐
-  │🐦 thumb│  │ │   │▓│   │█│   │▓│   │ │   │░│   │█│   Northern Cardinal   (23)
-  ├────────┤  └─┘   └─┘   └─┘   └─┘   └─┘   └─┘   └─┘
-  │🐦 thumb│  │░│   │ │   │▓│   │█│   │█│   │▓│   │░│   Black-capped Chickadee (15)
-  └────────┘
-   ↑ left column: species appear dynamically, newest/most-seen on top
-                  each row = best thumbnail + name + week total
-                  each square's color intensity = sightings that day
-```
+- 🔊 badge on a cell where the bird was **seen and heard** that day (confirmed).
+- a **"heard nearby"** section (accent-outlined squares) for catalog species heard but
+  not seen at the feeder.
+- header stats: visits, species seen, species heard, busiest day.
+- auto-refreshes every 30s (for a wall display); week navigation; click a cell for a
+  reference-vs-captured lightbox.
 
-Creative touches:
-- **Square color = count bucket** (0 / 1–2 / 3–5 / 6–9 / 10+), each species can get its own hue
-  so the grid reads like a quilt.
-- **Hover a square** → tooltip with exact count and the times seen that day.
-- **Click a square** → lightbox of that day's captured crops for that species.
-- **Left column is dynamic** — species only appear once seen; sorted by weekly total.
-- **Week picker** — jump to previous weeks; "This week" defaults to the current Sun–Sat.
-- Header stats: total visits, distinct species, busiest day, "rarest visitor".
-
-Endpoints:
-- `GET /` — the page.
-- `GET /api/week?start=YYYY-MM-DD` — JSON: `{ days:[...7 dates], species:[{name, thumb, total, counts:[7], times:[[..]]}] }`.
-- `GET /captures/<path>` — serve saved crop images.
+`GET /api/week?start=YYYY-MM-DD` → `{ days, seen[], heard_only[], catalog[], stats, audio_on }`.
 
 ## Repo layout
 
 ```
 BirdWatcher/
-├── PLAN.md                  ← this file
-├── README.md                ← setup / run instructions
+├── PLAN.md / README.md
 ├── requirements.txt
-├── config.example.yaml      ← copy to config.yaml and fill in RTSP URL
-├── .gitignore
-├── run.py                   ← entrypoint:  python run.py watch | web | initdb
+├── config.example.yaml         ← copy to config.yaml (git-ignored)
+├── go2rtc.example.yaml          ← copy to go2rtc.yaml (git-ignored)
+├── run.py                       ← watch | web | test | seed | initdb
 ├── birdwatcher/
-│   ├── __init__.py
-│   ├── config.py            ← typed config loaded from config.yaml / env
-│   ├── database.py          ← SQLite helpers + queries for the weekly grid
-│   ├── capture.py           ← RTSP reader + motion gate
-│   ├── detector.py          ← YOLO bird detector
-│   ├── classifier.py        ← pluggable species ID (tfhub / claude / stub)
-│   ├── pipeline.py          ← glues stages together, runs the watch loop
-│   └── web/
-│       ├── app.py           ← Flask app + API
-│       ├── templates/index.html
-│       └── static/{style.css, app.js}
-└── data/
-    ├── birdwatcher.db        (created at runtime, git-ignored)
-    └── captures/             (saved crops, git-ignored)
+│   ├── config.py  capture.py  detector.py  classifier.py  pipeline.py
+│   ├── database.py              ← visits + weekly-grid query
+│   ├── birdnetgo.py             ← read-only BirdNET-Go reader (audio overlay)
+│   └── web/{app.py, templates/, static/}
+├── data/species_catalog.json    ← Cobb County / Cole's list (32 species)
+├── tools/fetch_reference_images.py
+└── scripts/
+    ├── install_pi.sh  install_services.sh  install_go2rtc.sh
 ```
 
-## Getting the RTSP URL from UniFi Protect
+## Stream stability — the saga, and the verdict
 
-1. Open **UniFi Protect** → **Settings → System** (or the camera's settings) → enable **RTSP**.
-2. On the camera, toggle on a stream quality (High/Medium/Low) under **RTSP**.
-3. Modern Protect gives an RTSPS URL like `rtsps://<NVR-IP>:7441/<streamId>?enableSrtp` — paste it into `config.yaml`.
-4. Lower resolution stream = less CPU for motion/detection; High = better species crops.
-   Medium is usually the sweet spot for a feeder.
+Symptom: the RTSP feed dropped/reconnected every ~3 minutes. We ruled out, in order:
+hardware (Pi 5 idle, ethernet, no throttle), power, SRTP (`?enableSrtp`), resolution
+(720p vs 4 MP), and our reconnect code. Adding **go2rtc** finally isolated it: go2rtc
+logs `i/o timeout` reading from the UniFi NVR — **the camera/NVR stops sending data on
+a timer.** Verdict: a UniFi Protect RTSP quirk. go2rtc minimizes the disruption (fast,
+shared reconnect) but can't make a flaky camera stable. **The fix is a different camera**
+(an optical-zoom Reolink) — which also fixes the framing/ID-accuracy problem.
 
-## Build order (milestones)
+## Milestones — all complete ✅
 
-1. **M1 – Plumbing:** ✅ repo, config, DB, pluggable interfaces, `stub` classifier,
-   web UI. Runs end-to-end with seed data.
-2. **M2 – See the stream:** ✅ RTSPS (TLS + SRTP) connects; `run.py test` grabs a frame.
-   Camera set to **High = 2688×1512 (4MP)** for maximum detail on distant birds.
-3. **M3 – Detect birds:** ✅ YOLO (`ultralytics`, installs cleanly on Python 3.14) wired
-   into the watch loop; capturing live with `stub` labels.
-4. **M4 – Name them:** ▶ pick a species backend and review accuracy. Note: TensorFlow /
-   TF-Hub has no Python 3.14 wheels yet → **leaning Claude-vision backend** (also
-   cloud-friendly), or run TF in a separate Python 3.12 env.
-5. **M5 – Polish:** debounce tuning, low-confidence Claude fallback, week nav, lightbox,
-   optional daily summary.
-6. **M6 – Hear them (audio / BirdNET):** parallel acoustic pipeline — pull the camera's
-   48 kHz audio track (ffmpeg/PyAV) → BirdNET (`birdnetlib`, location + date aware) →
-   `audio_detections` table. Correlate with visual sightings: 🔊 confirm badge when
-   *seen* and *heard* agree, plus a "heard nearby" soundscape layer for birds that never
-   land. Caveats: TFLite on Py 3.14 may need its own env; wind noise hurts accuracy.
-7. **M7 – Host it (self-hosted Pi appliance — CHOSEN):** run the whole stack (capture +
-   detect + classify + SQLite + web) on a **Raspberry Pi 4 B / 8 GB** on the home LAN —
-   no cloud. Wall screen + phones load `http://<pi-ip>:8000` (bind web host to `0.0.0.0`).
-   Free, private, sits right next to the camera. To-dos: storage ≥64 GB or **boot from a
-   USB SSD** (the 8 GB SD is too small + wears out under 24/7 writes); feed the Pi the
-   **1080** stream (Pi 4 H.264 hw-decode caps ~1080p); export YOLO to **NCNN** for a few
-   FPS; `systemd` unit so it survives reboots. *Azure hybrid (Container App + Postgres +
-   Blob, edge pushes results) stays the fallback only if public/remote access is ever
-   needed — and a free Tailscale tunnel to the Pi would cover remote without Azure.*
+1. **M1 – Plumbing:** repo, config, DB, pluggable interfaces, web UI.
+2. **M2 – See the stream:** RTSPS connects; `run.py test`.
+3. **M3 – Detect birds:** YOLO wired into the watch loop.
+4. **M4 – Name them:** local **BioCLIP** classifier, constrained to the catalog.
+5. **M5 – Polish:** visit tracking + best-frame dedup, responsive grid, auto-refresh, lightbox.
+6. **M6 – Hear them:** **BirdNET-Go** (pivoted from a hand-rolled `birdnetlib` worker —
+   it's better) + read-only integration into our dashboard (🔊 seen-and-heard, "heard nearby").
+7. **M7 – Host it:** self-hosted **Raspberry Pi 5** appliance on the home LAN, no cloud;
+   data on a 4.6 TB USB; go2rtc + watch + web + BirdNET-Go as systemd services, auto-start.
 
-## Open questions / decisions
+*(Azure was evaluated and rejected for this home use case — the Pi is free, private, and
+sits next to the camera. A friend's Frigate/Coral/Svelte/MQTT stack was reviewed; we
+adopted only **go2rtc** and **BirdNET-Go**, which solved real problems.)*
 
-- **Deployment target: DECIDED — self-hosted Raspberry Pi 4 B (8 GB), home LAN only, no
-  cloud** (see M7). Prereq: bigger / SSD storage before migrating off the desktop.
-- **Species backend (M4):** still to confirm — fully-offline **local TFLite/ONNX** model on
-  the Pi vs a **cloud vision API** (GPT-4o / Claude, needs internet). TF/TF-Hub still lacks
-  Python 3.14 wheels, so a local model would run via TFLite/ONNX or a separate 3.12 env.
-- Keep every crop, or only the best crop per visit (saves SD/SSD space)?
-- **Resolution:** High / 4 MP for desktop testing now; **use 1080 on the Pi** (decode limit).
-- Background **service**: `systemd` on the Pi so the watcher + web auto-start and survive
-  reboots.
+## Open items
+
+- **Camera swap** — to an optical-zoom RTSP camera with a mic (Reolink RLC-823A class):
+  fixes the UniFi RTSP instability **and** tightens framing for better IDs / fewer
+  one-bird-as-two splits. The only remaining rough edge.
+- Optional polish: NCNN export of YOLO for more FPS headroom; quilt-vs-heatmap cell colors
+  (a user preference); MQTT/Home-Assistant hooks if ever wanted.
