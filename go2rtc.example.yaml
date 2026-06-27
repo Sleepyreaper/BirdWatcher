@@ -1,0 +1,14 @@
+# Copy to go2rtc.yaml and paste your real camera URL below.
+# go2rtc holds ONE stable connection to the camera and restreams it locally, so
+# the watcher reads a rock-steady rtsp://127.0.0.1:8554/birdcam instead of the
+# flaky direct camera link (it absorbs the RTSPS reconnects we were fighting).
+
+streams:
+  # Your camera's RTSPS URL (the 4 MP one is fine now — go2rtc handles it).
+  birdcam: rtsps://192.168.1.1:7441/CHANGE_ME
+
+rtsp:
+  listen: "127.0.0.1:8554"   # local restream the watcher connects to
+
+api:
+  listen: "127.0.0.1:1984"   # go2rtc status page / API (optional, for debugging)

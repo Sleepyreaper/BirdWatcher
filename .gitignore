@@ -11,6 +11,10 @@ data/*.err
 # models
 *.pt
 
+# go2rtc restreamer (binary + local config holding the camera URL)
+go2rtc
+go2rtc.yaml
+
 # downloaded reference images (regenerate via tools/fetch_reference_images.py)
 assets/reference/
 assets/_mock_*.txt
