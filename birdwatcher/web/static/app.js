@@ -134,3 +134,6 @@ function shift(days) {
 }
 
 loadWeek(null);
+
+// auto-refresh so new captures appear without a manual reload (handy for a wall display)
+setInterval(() => loadWeek(currentStart), 30000);
