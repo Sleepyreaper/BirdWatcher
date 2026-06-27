@@ -75,6 +75,13 @@ class PipelineConfig:
     min_visit_frames: int = 2
     # Save the single best cropped bird image per visit.
     save_crops: bool = True
+    # If set, POST each visit to this URL (a remote dashboard's /api/ingest)
+    # instead of writing to a local DB. Lets a beefy PC do detection while the
+    # Pi serves the UI + storage. e.g. "http://192.168.1.138:8000/api/ingest"
+    ingest_url: str = ""
+    # Shared secret for the ingest endpoint: the sender includes it, the
+    # receiver (web app, same field in its config) checks it.
+    ingest_token: str = ""
 
 
 @dataclass

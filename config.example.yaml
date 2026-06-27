@@ -29,8 +29,14 @@ classifier:
   claude_model: "claude-opus-4-8"
 
 pipeline:
-  visit_cooldown: 60.0      # seconds; collapse repeats into one visit
+  visit_timeout: 60.0       # seconds of no sighting before a visit is closed
+  min_visit_frames: 2       # ignore blips seen in fewer frames than this
   save_crops: true
+  # Distributed mode: let a beefy PC do detection and POST each visit to the Pi's
+  # dashboard. On the PC set ingest_url to the Pi + a shared token; set the SAME
+  # token on the Pi (its web app checks it). Empty ingest_url = write locally.
+  ingest_url: ""            # e.g. "http://192.168.1.138:8000/api/ingest"
+  ingest_token: ""
 
 web:
   host: "127.0.0.1"

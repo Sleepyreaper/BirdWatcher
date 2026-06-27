@@ -134,6 +134,43 @@ def create_app(cfg: Config | None = None) -> Flask:
     def reference(rel: str):
         return send_from_directory(REFERENCE_DIR, rel)
 
+    @app.route("/api/ingest", methods=["POST"])
+    def ingest():
+        """Receive a visit (metadata + best crop) from a remote watcher (e.g. the PC)."""
+        import base64
+        from datetime import datetime
+
+        data = request.get_json(force=True, silent=True) or {}
+        expected = cfg.pipeline.ingest_token
+        if expected and data.get("token") != expected:
+            return jsonify({"error": "forbidden"}), 403
+        try:
+            first = datetime.fromisoformat(data["first_ts"])
+        except (KeyError, ValueError):
+            return jsonify({"error": "bad or missing first_ts"}), 400
+        last = datetime.fromisoformat(data["last_ts"]) if data.get("last_ts") else first
+        species = data.get("species", "Unknown bird")
+
+        rel = None
+        if data.get("image_b64"):
+            day_dir = captures_dir / first.strftime("%Y-%m-%d")
+            day_dir.mkdir(parents=True, exist_ok=True)
+            slug = species.lower().replace(" ", "-").replace("/", "-")
+            out = day_dir / f"{slug}_{first.strftime('%H%M%S')}.jpg"
+            out.write_bytes(base64.b64decode(data["image_b64"]))
+            rel = str(out.relative_to(captures_dir)).replace("\\", "/")
+
+        get_db().add_visit(
+            species=species,
+            confidence=float(data.get("confidence", 0)),
+            image_path=rel,
+            detector_conf=data.get("detector_conf"),
+            first_ts=first,
+            last_ts=last,
+            frames=int(data.get("frames", 1)),
+        )
+        return jsonify({"ok": True})
+
     return app
 
 

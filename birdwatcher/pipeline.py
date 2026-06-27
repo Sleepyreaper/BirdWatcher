@@ -109,16 +109,19 @@ class Pipeline:
         species = result.species
         if result.confidence < self.cfg.classifier.min_confidence:
             species = "Unknown bird"
-        rel = self._save_crop(v.best_crop, species, v.first_seen)
-        self.db.add_visit(
-            species=species,
-            confidence=result.confidence,
-            image_path=rel,
-            detector_conf=v.best_det_conf,
-            first_ts=v.first_seen,
-            last_ts=v.last_seen,
-            frames=v.frames,
-        )
+        if self.cfg.pipeline.ingest_url:
+            self._post_visit(v, species, result.confidence)
+        else:
+            rel = self._save_crop(v.best_crop, species, v.first_seen)
+            self.db.add_visit(
+                species=species,
+                confidence=result.confidence,
+                image_path=rel,
+                detector_conf=v.best_det_conf,
+                first_ts=v.first_seen,
+                last_ts=v.last_seen,
+                frames=v.frames,
+            )
         dur = (v.last_seen - v.first_seen).total_seconds()
         print(f"[pipeline] {v.first_seen:%H:%M:%S}  visit: {species}  "
               f"frames={v.frames} dur={dur:.0f}s id={result.confidence:.2f}")
@@ -134,6 +137,34 @@ class Pipeline:
         out = day_dir / f"{slug}_{ts.strftime('%H%M%S')}.jpg"
         cv2.imwrite(str(out), crop)
         return str(out.relative_to(self.captures_dir)).replace("\\", "/")
+
+    def _post_visit(self, v: _Visit, species: str, conf: float) -> None:
+        """Send the visit (metadata + best crop) to a remote dashboard's ingest API."""
+        import base64
+        import json
+        import urllib.request
+
+        import cv2
+
+        ok, buf = cv2.imencode(".jpg", v.best_crop)
+        payload = json.dumps({
+            "token": self.cfg.pipeline.ingest_token,
+            "species": species,
+            "confidence": conf,
+            "detector_conf": v.best_det_conf,
+            "first_ts": v.first_seen.isoformat(timespec="seconds"),
+            "last_ts": v.last_seen.isoformat(timespec="seconds"),
+            "frames": v.frames,
+            "image_b64": base64.b64encode(buf.tobytes()).decode() if ok else "",
+        }).encode()
+        req = urllib.request.Request(
+            self.cfg.pipeline.ingest_url, data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=10).read()
+        except Exception as e:
+            print(f"[pipeline] ingest POST failed: {e}")
 
     # --- run loop ---------------------------------------------------------
     def run(self) -> None:
