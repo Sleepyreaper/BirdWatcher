@@ -97,6 +97,12 @@ class Paths:
 
 
 @dataclass
+class AudioConfig:
+    # Read-only path to BirdNET-Go's SQLite DB. Empty = audio integration off.
+    birdnet_db: str = ""
+
+
+@dataclass
 class Config:
     camera: CameraConfig = field(default_factory=CameraConfig)
     motion: MotionConfig = field(default_factory=MotionConfig)
@@ -105,6 +111,7 @@ class Config:
     pipeline: PipelineConfig = field(default_factory=PipelineConfig)
     web: WebConfig = field(default_factory=WebConfig)
     paths: Paths = field(default_factory=Paths)
+    audio: AudioConfig = field(default_factory=AudioConfig)
 
 
 def _resolve(p: str | os.PathLike[str]) -> Path:

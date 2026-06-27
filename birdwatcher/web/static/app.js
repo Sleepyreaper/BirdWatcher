@@ -1,4 +1,4 @@
-// BirdWatcher weekly grid — reference photos on rows, deduped visit counts.
+// BirdWatcher weekly grid — visual visits + acoustic (BirdNET-Go) detections.
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 let currentStart = null;
@@ -43,12 +43,9 @@ function render(d) {
 
   const s = document.getElementById("stats");
   s.innerHTML = "";
-  s.append(
-    stat(d.stats.visits, "Visits this week"),
-    stat(d.stats.species_seen, "Species seen"),
-    stat(d.stats.on_list, "On your list"),
-    stat(d.stats.busiest_day, "Busiest day"),
-  );
+  s.append(stat(d.stats.visits, "Visits this week"), stat(d.stats.species_seen, "Species seen"));
+  if (d.audio_on) s.append(stat(d.stats.species_heard, "Species heard"));
+  s.append(stat(d.stats.on_list, "On your list"), stat(d.stats.busiest_day, "Busiest day"));
 
   const g = document.getElementById("grid");
   g.innerHTML = "";
@@ -63,10 +60,15 @@ function render(d) {
   });
   g.append(head);
 
-  document.getElementById("empty").hidden = d.seen.length > 0;
+  document.getElementById("empty").hidden = d.seen.length > 0 || d.heard_only.length > 0;
   d.seen.forEach((sp) => g.append(seenRow(sp, d, today)));
 
-  const expected = d.catalog.filter((c) => !c.seen);
+  if (d.heard_only.length) {
+    g.append(el("div", "divider", `<span class="hsong">🔊 heard nearby</span> · not seen at the feeder`));
+    d.heard_only.forEach((sp) => g.append(heardRow(sp, d, today)));
+  }
+
+  const expected = d.catalog.filter((c) => !c.seen && !c.heard);
   if (expected.length) {
     g.append(el("div", "divider", `on your Cole's Special Feeder list · not seen this week`));
     expected.forEach((sp) => g.append(expectedRow(sp)));
@@ -83,13 +85,32 @@ function seenRow(sp, d, today) {
   row.append(el("div", "species",
     `${avatar(sp.reference)}<div class="meta"><div class="name">${sp.name}</div><div class="sub">${sub}</div></div>`));
   sp.counts.forEach((c, i) => {
-    const cell = el("div", "cell" + (c ? " has" : "") + (d.days[i] === today ? " today" : ""));
+    const heardHere = sp.heard && sp.heard[i] > 0;
+    const cell = el("div", "cell" + (c ? " has" : "") + (c && heardHere ? " confirmed" : "") +
+      (d.days[i] === today ? " today" : ""));
     const col = cellColor(sp.name, c);
     if (col) cell.style.background = col;
     if (c) {
       cell.textContent = c;
-      cell.title = `${sp.name} — ${d.days[i]}\n${c} visit(s)\n${(sp.times[i] || []).join(", ")}`;
+      cell.title = `${sp.name} — ${d.days[i]}\n${c} visit(s)` +
+        (heardHere ? " · also heard 🔊" : "") + `\n${(sp.times[i] || []).join(", ")}`;
       cell.onclick = () => openDetail(sp, i, d.days[i]);
+    }
+    row.append(cell);
+  });
+  return row;
+}
+
+function heardRow(sp, d, today) {
+  const row = el("div", "row");
+  row.append(el("div", "species",
+    `${avatar(sp.reference)}<div class="meta"><div class="name">${sp.name} <span class="hsong">🔊</span></div>` +
+    `<div class="sub">heard${sp.scientific ? ` · ${sp.scientific}` : ""}</div></div>`));
+  sp.heard.forEach((h, i) => {
+    const cell = el("div", "cell" + (h ? " heard" : "") + (d.days[i] === today ? " today" : ""));
+    if (h) {
+      cell.textContent = h;
+      cell.title = `${sp.name} — ${d.days[i]}\nheard ${h}× 🔊 (not seen at the feeder)`;
     }
     row.append(cell);
   });
@@ -109,11 +130,13 @@ function openDetail(sp, dayIdx, dayIso) {
   const ref = sp.reference ? `<figure><img src="${sp.reference}"><figcaption>field guide</figcaption></figure>` : "";
   const cap = sp.thumb ? `<figure><img src="/captures/${sp.thumb}"><figcaption>best frame caught</figcaption></figure>` : "";
   const times = sp.times[dayIdx] || [];
+  const heardHere = sp.heard && sp.heard[dayIdx] > 0;
   body.innerHTML =
-    `<h3>${sp.name}</h3>` +
+    `<h3>${sp.name}${heardHere ? ' <span class="hsong">🔊</span>' : ""}</h3>` +
     `<div class="sci">${[sp.scientific, sp.family].filter(Boolean).join(" · ")}</div>` +
     `<div class="shots">${ref}${cap}</div>` +
     (cap ? `<div class="note">best frame kept from the visit; blurrier ones discarded</div>` : "") +
+    (heardHere ? `<div class="note heard">🔊 heard here too — confirmed at the feeder by sound</div>` : "") +
     `<div class="kv"><span>${dayIso}</span><span>${times.length} visit(s)${times.length ? " · " + times.join(", ") : ""}</span></div>`;
   document.getElementById("lightbox").hidden = false;
 }

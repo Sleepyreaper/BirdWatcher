@@ -58,7 +58,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .species .sub { font-size: .72rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .cell {
-  aspect-ratio: 1 / 1; width: 100%; max-width: 56px; margin: 0 auto; border-radius: 7px;
+  aspect-ratio: 1 / 1; width: 100%; max-width: 56px; margin: 0 auto; border-radius: 7px; position: relative;
   background: var(--panel-2); border: 1px solid var(--line);
   display: grid; place-items: center; font-size: .82rem; font-weight: 600; color: #06210b;
   transition: transform .08s ease;
@@ -87,3 +87,9 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .shots figcaption { font-size: .72rem; color: var(--muted); text-align: center; margin-top: 5px; }
 .note { margin: 14px 0 0; background: rgba(126,231,135,.12); color: var(--accent); border-radius: 8px; padding: 9px 12px; font-size: .82rem; }
 .kv { display: flex; justify-content: space-between; gap: 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
+
+/* acoustic (BirdNET-Go) layer */
+.cell.confirmed::after { content: "🔊"; position: absolute; top: -5px; right: -4px; font-size: 9px; line-height: 1; }
+.cell.heard { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); }
+.hsong { color: var(--accent); }
+.note.heard { background: rgba(126,231,135,.10); color: var(--accent); }

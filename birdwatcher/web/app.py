@@ -1,4 +1,9 @@
-"""Flask app: serves the weekly bird grid, the species catalog, and images."""
+"""Flask app: serves the weekly bird grid, the species catalog, and images.
+
+Merges two sources: visual visits (our pipeline -> SQLite) and acoustic
+detections (BirdNET-Go's SQLite, read-only). A species can be seen, heard, or
+both — "both" means confirmed at the feeder, not just in earshot.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +12,7 @@ from datetime import date, timedelta
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
+from ..birdnetgo import BirdnetGoReader
 from ..config import PROJECT_ROOT, Config, load_config
 from ..database import Database, week_start_for
 
@@ -15,7 +21,6 @@ REFERENCE_DIR = PROJECT_ROOT / "assets" / "reference"
 
 
 def _ref_url(reference_image: str | None) -> str | None:
-    """Turn a catalog reference_image path into a served URL."""
     if not reference_image:
         return None
     return "/reference/" + reference_image.rsplit("/", 1)[-1]
@@ -35,6 +40,12 @@ def create_app(cfg: Config | None = None) -> Flask:
     app = Flask(__name__)
     captures_dir = cfg.paths.captures_path()
     region, catalog = _load_catalog()
+    sci_to_common = {
+        sp["scientific_name"]: name
+        for name, sp in catalog.items()
+        if sp.get("scientific_name")
+    }
+    birdnet = BirdnetGoReader(cfg.audio.birdnet_db)
 
     def get_db() -> Database:
         if not hasattr(app, "_bw_db"):
@@ -52,6 +63,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             date.fromisoformat(start_param) if start_param else week_start_for(date.today())
         )
         grid = get_db().week_grid(week_start)
+        heard = birdnet.heard_week(week_start, sci_to_common)
 
         seen, seen_names = [], set()
         per_day = [0] * 7
@@ -62,10 +74,26 @@ def create_app(cfg: Config | None = None) -> Flask:
                 "scientific": meta.get("scientific_name"),
                 "family": meta.get("family"),
                 "reference": _ref_url(meta.get("reference_image")),
+                "heard": heard.get(sp["name"], [0] * 7),
             })
             seen_names.add(sp["name"])
             for i, c in enumerate(sp["counts"]):
                 per_day[i] += c
+
+        # catalog species heard but NOT seen at the feeder this week
+        heard_only = []
+        for name, counts in heard.items():
+            if name in seen_names:
+                continue
+            meta = catalog.get(name, {})
+            heard_only.append({
+                "name": name,
+                "scientific": meta.get("scientific_name"),
+                "family": meta.get("family"),
+                "reference": _ref_url(meta.get("reference_image")),
+                "heard": counts,
+            })
+        heard_only.sort(key=lambda s: sum(s["heard"]), reverse=True)
 
         catalog_list = [{
             "name": sp["common_name"],
@@ -74,6 +102,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             "seasonality": sp.get("seasonality"),
             "reference": _ref_url(sp.get("reference_image")),
             "seen": sp["common_name"] in seen_names,
+            "heard": sp["common_name"] in heard,
         } for sp in catalog.values()]
 
         total = sum(per_day)
@@ -85,10 +114,13 @@ def create_app(cfg: Config | None = None) -> Flask:
             "next": (week_start + timedelta(days=7)).isoformat(),
             "is_current": week_start == week_start_for(date.today()),
             "seen": seen,
+            "heard_only": heard_only,
             "catalog": catalog_list,
+            "audio_on": birdnet.available(),
             "stats": {
                 "visits": total,
                 "species_seen": len(seen),
+                "species_heard": len(heard),
                 "on_list": len(catalog_list),
                 "busiest_day": DAYS[per_day.index(max(per_day))] if total else "—",
             },

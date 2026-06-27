@@ -40,3 +40,9 @@ web:
 paths:
   db: "data/birdwatcher.db"
   captures: "data/captures"
+
+audio:
+  # Path to BirdNET-Go's birdnet.db to overlay acoustic "heard" detections on the
+  # dashboard (read-only). Empty = audio layer off. On the Pi this is typically
+  # /mnt/birddata/birdnet-go-app/data/birdnet.db
+  birdnet_db: ""
