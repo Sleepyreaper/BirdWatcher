@@ -36,11 +36,11 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .stat .num { font-size: 1.5rem; font-weight: 700; }
 .stat .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
 
-.gridwrap { padding: 14px 24px 48px; }
+.gridwrap { padding: 14px 24px 48px; overflow-x: auto; }
 .grid { display: block; }
 
 .row {
-  display: grid; grid-template-columns: 220px repeat(7, 1fr);
+  display: grid; grid-template-columns: minmax(120px, 1fr) repeat(7, 40px);
   gap: 6px; align-items: center; padding: 4px 0;
 }
 .row.head { position: sticky; top: 70px; background: var(--bg); z-index: 3; padding-bottom: 6px; }
