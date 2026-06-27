@@ -43,7 +43,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
   display: grid; grid-template-columns: minmax(120px, 1fr) repeat(7, 40px);
   gap: 6px; align-items: center; padding: 4px 0;
 }
-.row.head { position: sticky; top: 70px; background: var(--bg); z-index: 3; padding-bottom: 6px; }
+.row.head { background: var(--bg); padding-bottom: 6px; }
 .row.head .daycol { text-align: center; color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .4px; }
 .row.head .daycol .dnum { display: block; color: var(--text); font-size: .95rem; }
 .row.head .daycol.today { color: var(--accent); }
