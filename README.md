@@ -48,12 +48,35 @@ square is colored by how many times that species visited.
 
 Set `classifier.backend` in `config.yaml`:
 
+- `bioclip` — **default**; local BioCLIP zero-shot against the species catalog. No API key.
 - `stub` — no ML; everything is "Unknown bird" (use to test plumbing).
-- `tfhub` — Google `aiy/birds_V1`, ~964 species, fully local, free.
-- `claude` — Claude vision; most accurate, needs `ANTHROPIC_API_KEY`.
+- `tfhub` — Google `aiy/birds_V1` (needs TensorFlow; no Python 3.14 wheels yet).
+- `claude` — Claude vision; needs `ANTHROPIC_API_KEY`.
+
+## Deploy on a Raspberry Pi (M7)
+
+The intended home for BirdWatcher: a small always-on Pi on your LAN, no cloud.
+
+1. **Flash** Raspberry Pi OS (64-bit). In Raspberry Pi Imager → advanced settings,
+   enable **SSH**, set the hostname/wifi. Use a **64 GB+ card or USB SSD** (the OS +
+   crops outgrow a small card, and SD cards wear out under 24/7 writes).
+2. **SSH in**, then:
+   ```bash
+   git clone https://github.com/Sleepyreaper/BirdWatcher.git
+   cd BirdWatcher
+   bash scripts/install_pi.sh        # deps, venv, model, reference images
+   nano config.yaml                  # set rtsp_url (1080 stream), web.host: 0.0.0.0
+   .venv/bin/python run.py test      # confirm the camera
+   bash scripts/install_services.sh  # systemd: auto-start + survive reboots
+   ```
+3. Open `http://<pi-ip>:8000` from any device on your network (or the wall screen).
+
+Notes: feed the Pi the **1080** stream (Pi 4 H.264 decode caps ~1080p); optionally
+`yolo export model=yolov8n.pt format=ncnn` for a few extra FPS on ARM.
 
 ## Status
 
-Milestone **M1** — plumbing complete; UI renders from the DB and you can preview
-it with `seed`. Next: point `config.yaml` at your real RTSP URL and enable a
-detector/classifier backend (see PLAN.md milestones).
+M1–M4 done: RTSPS capture → motion gate → YOLO detect → visit dedup (best frame) →
+local BioCLIP species ID → weekly reference-photo dashboard, with a 32-species
+Cobb County / Cole's Special Feeder catalog. Next: **M7** (this Pi deploy), then
+**M6** (audio / BirdNET). See [PLAN.md](PLAN.md).
