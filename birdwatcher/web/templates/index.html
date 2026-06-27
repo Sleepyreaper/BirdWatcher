@@ -12,11 +12,14 @@
       <h1>🐦 BirdWatcher</h1>
       <div class="region" id="region">Loading…</div>
     </div>
-    <div class="weeknav">
-      <button id="prev" title="Previous week">‹</button>
-      <span id="weeklabel"></span>
-      <button id="next" title="Next week">›</button>
-      <button id="today" class="ghost">This week</button>
+    <div class="right">
+      <div class="weeknav">
+        <button class="iconbtn" id="prev" title="Previous week">‹</button>
+        <span id="weeklabel"></span>
+        <button class="iconbtn" id="next" title="Next week">›</button>
+        <button class="iconbtn" id="today" title="This week" style="width:auto;padding:0 10px;font-size:.8rem">today</button>
+      </div>
+      <button class="iconbtn" id="theme" title="Toggle light / dark">◐</button>
     </div>
   </header>
 
@@ -25,15 +28,22 @@
   <main class="gridwrap">
     <div id="grid" class="grid"></div>
     <div class="legend">
-      <span>fewer</span>
-      <span class="sw" style="background:var(--panel-2)"></span>
-      <span class="sw" style="background:hsl(45 55% 26%)"></span>
-      <span class="sw" style="background:hsl(45 70% 40%)"></span>
-      <span class="sw" style="background:hsl(45 80% 55%)"></span>
-      <span>more</span>
+      <span id="legend-note"></span>
+      <span class="scale">less
+        <span class="sw" style="background:var(--cell-empty)"></span>
+        <span class="sw" style="background:#B5D4F4"></span>
+        <span class="sw" style="background:#85B7EB"></span>
+        <span class="sw" style="background:#378ADD"></span>
+        <span class="sw" style="background:#185FA5"></span>more
+      </span>
     </div>
-    <p id="empty" class="empty" hidden>No birds recorded this week yet — the watcher's listening.</p>
+    <p id="empty" class="empty" hidden>No birds yet this week — the feeder's listening.</p>
   </main>
+
+  <section class="nowcard" id="nowcard" hidden>
+    <h3>● right now</h3>
+    <div class="items" id="now-items"></div>
+  </section>
 
   <div id="lightbox" class="lightbox" hidden>
     <div class="lightbox-inner">

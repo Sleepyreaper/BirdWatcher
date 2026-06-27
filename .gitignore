@@ -15,6 +15,9 @@ data/*.err
 go2rtc
 go2rtc.yaml
 
+# local dev preview server config
+.claude/launch.json
+
 # downloaded reference images (regenerate via tools/fetch_reference_images.py)
 assets/reference/
 assets/_mock_*.txt

@@ -64,7 +64,8 @@ def cmd_seed(args) -> None:
                 ts = start + timedelta(
                     days=day, hours=random.randint(6, 19), minutes=random.randint(0, 59)
                 )
-                db.add_sighting(sp, round(random.uniform(0.4, 0.99), 2), ts=ts)
+                db.add_visit(species=sp, confidence=round(random.uniform(0.4, 0.99), 2),
+                             first_ts=ts, frames=random.randint(2, 9))
                 n += 1
     db.close()
     print(f"Seeded {n} fake sightings for the current week. Run `python run.py web`.")
