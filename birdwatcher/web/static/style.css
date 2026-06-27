@@ -40,7 +40,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .grid { display: block; }
 
 .row {
-  display: grid; grid-template-columns: 260px repeat(7, 40px); justify-content: start;
+  display: grid; grid-template-columns: 260px repeat(7, minmax(40px, 1fr));
   gap: 6px; align-items: center; padding: 4px 0;
 }
 .row.head { background: var(--bg); padding-bottom: 6px; }
