@@ -133,3 +133,20 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .note { margin-top: 14px; background: var(--surface-soft); border-radius: 9px; padding: 9px 12px; font-size: .82rem; color: var(--text-soft); }
 .note.heard { color: var(--accent); }
 .kv { display: flex; justify-content: space-between; gap: 16px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: .8rem; }
+
+/* --- Accessibility: visible keyboard focus -------------------------------
+   A clear focus ring for keyboard users (WCAG 2.4.7). Uses :focus-visible so
+   mouse clicks don't show a ring but Tab navigation does. 2px ring + offset. */
+a:focus-visible,
+button:focus-visible,
+.iconbtn:focus-visible,
+.cell.has:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Respect users who ask for less motion — disable the cell pulse animation. */
+@media (prefers-reduced-motion: reduce) {
+  .cell.pulse { animation: none; }
+}

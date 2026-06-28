@@ -31,10 +31,23 @@ function heatT(c) { if (!c) return null; return c >= 10 ? ["#0F6E56","#fff"] : c
 async function loadWeek(start) {
   const seq = ++loadSeq;
   const url = start ? `/api/week?start=${start}` : "/api/week";
-  const d = await (await fetch(url)).json();
+  let d;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    d = await resp.json();
+  } catch (err) {
+    if (seq === loadSeq) showLoadError("Couldn't load this week.");
+    return;
+  }
   if (seq !== loadSeq) return;   // superseded by a newer navigation
   currentStart = d.start;
   render(d);
+}
+
+function showLoadError(msg) {
+  const emptyEl = document.getElementById("empty");
+  if (emptyEl) { emptyEl.textContent = msg + " Retrying…"; emptyEl.hidden = false; }
 }
 
 function render(d) {
@@ -145,7 +158,15 @@ function renderNow(d, today) {
 async function loadDay(dateIso) {
   const seq = ++loadSeq;
   const url = dateIso ? `/api/day?date=${dateIso}` : "/api/day";
-  const d = await (await fetch(url)).json();
+  let d;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    d = await resp.json();
+  } catch (err) {
+    if (seq === loadSeq) showLoadError("Couldn't load that day.");
+    return;
+  }
   if (seq !== loadSeq) return;   // superseded by a newer navigation
   renderDay(d);
 }
@@ -213,6 +234,13 @@ function hourRow(sp, nowH) {
   return row;
 }
 
+function _openLightbox() {
+  _lbReturnFocus = document.activeElement;
+  const lb = document.getElementById("lightbox");
+  lb.hidden = false;
+  const close = document.getElementById("lb-close");
+  if (close && close.focus) close.focus();   // move focus into the dialog
+}
 function openDetail(sp, dayIdx, dayIso) {
   const body = document.getElementById("lb-body");
   const ref = sp.reference ? `<figure><img src="${sp.reference}"><figcaption>field guide</figcaption></figure>` : "";
@@ -226,7 +254,7 @@ function openDetail(sp, dayIdx, dayIso) {
     (cap ? `<div class="note">best frame kept from the visit; blurrier ones discarded</div>` : "") +
     (heard ? `<div class="note heard">🔊 heard here too — confirmed at the feeder by sound</div>` : "") +
     `<div class="kv"><span>${dayIso}</span><span>${times.length} visit(s)${times.length ? " · " + times.join(", ") : ""}</span></div>`;
-  document.getElementById("lightbox").hidden = false;
+  _openLightbox();
 }
 
 function stat(n, l) { return el("div", "stat", `<div class="num">${n}</div><div class="lbl">${l}</div>`); }
@@ -257,7 +285,7 @@ function openShot(it) {
     `<div class="shots">${cap}${ref}</div>` +
     (it.kind === "heard" ? `<div class="note heard">🔊 heard nearby — detected by sound (BirdNET-Go)</div>` : "") +
     `<div class="kv"><span>${ago(it.ts)}</span><span>${it.kind === "seen" && it.confidence ? Math.round(it.confidence * 100) + "% match" : ""}</span></div>`;
-  document.getElementById("lightbox").hidden = false;
+  _openLightbox();
 }
 // one "last visited" card — the full history lives in the grid below
 async function loadRecent() {
@@ -287,8 +315,22 @@ document.getElementById("theme").onclick = () =>
 document.getElementById("prev").onclick = () => step(-1);
 document.getElementById("next").onclick = () => step(1);
 document.getElementById("today").onclick = () => { view === "day" ? loadWeek(currentStart) : loadDay(null); };
-document.getElementById("lb-close").onclick = () => (document.getElementById("lightbox").hidden = true);
-document.getElementById("lightbox").onclick = (e) => { if (e.target.id === "lightbox") e.target.hidden = true; };
+
+// --- Lightbox: accessible open/close (Escape, focus return) ---------------
+let _lbReturnFocus = null;
+function closeLightbox() {
+  const lb = document.getElementById("lightbox");
+  if (lb.hidden) return;
+  lb.hidden = true;
+  if (_lbReturnFocus && _lbReturnFocus.focus) _lbReturnFocus.focus();
+  _lbReturnFocus = null;
+}
+document.getElementById("lb-close").onclick = closeLightbox;
+document.getElementById("lightbox").onclick = (e) => { if (e.target.id === "lightbox") closeLightbox(); };
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeLightbox();
+});
+
 function iso(dt) { return dt.toISOString().slice(0, 10); }
 function step(dir) {
   if (view === "day") { const dt = new Date(currentDay + "T00:00:00"); dt.setDate(dt.getDate() + dir); loadDay(iso(dt)); }

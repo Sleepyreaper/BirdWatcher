@@ -25,7 +25,7 @@
   </header>
 
   <div class="page">
-  <section id="stats" class="stats"></section>
+  <section id="stats" class="stats" aria-live="polite" aria-label="Weekly summary"></section>
 
   <section id="recent" class="lastvisit" hidden>
     <div class="lv-card" id="lv-card"></div>
@@ -53,8 +53,8 @@
   </div><!-- .page -->
 
   <div id="lightbox" class="lightbox" hidden>
-    <div class="lightbox-inner">
-      <button id="lb-close" class="lb-close" aria-label="close">×</button>
+    <div class="lightbox-inner" role="dialog" aria-modal="true" aria-label="Bird detail">
+      <button id="lb-close" class="lb-close" aria-label="Close detail">×</button>
       <div id="lb-body"></div>
     </div>
   </div>

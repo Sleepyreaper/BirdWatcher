@@ -7,6 +7,7 @@ not one detection. The pipeline collapses frames into a visit and writes the bes
 from __future__ import annotations
 
 import sqlite3
+import threading
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -37,6 +38,17 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # The web app shares ONE connection across Flask's threaded server
+        # (check_same_thread=False). SQLite serializes at the file level, but a
+        # single Python connection is not safe for concurrent use, so guard every
+        # access with a re-entrant lock. WAL lets readers and the writer coexist
+        # without blocking — both are Pi-friendly (no extra processes/services).
+        self._lock = threading.RLock()
+        try:
+            self._conn.execute("PRAGMA journal_mode=WAL")
+            self._conn.execute("PRAGMA busy_timeout=5000")
+        except sqlite3.Error:
+            pass
         self._conn.executescript(SCHEMA)
         self._migrate()
         self._conn.commit()
@@ -63,67 +75,73 @@ class Database:
     ) -> int:
         first_ts = first_ts or datetime.now()
         last_ts = last_ts or first_ts
-        cur = self._conn.execute(
-            "INSERT INTO sightings (ts, species, confidence, image_path, detector_conf,"
-            " last_ts, frames) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                first_ts.isoformat(timespec="seconds"),
-                species,
-                confidence,
-                image_path,
-                detector_conf,
-                last_ts.isoformat(timespec="seconds"),
-                frames,
-            ),
-        )
-        self._conn.commit()
-        return int(cur.lastrowid)
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO sightings (ts, species, confidence, image_path, detector_conf,"
+                " last_ts, frames) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    first_ts.isoformat(timespec="seconds"),
+                    species,
+                    confidence,
+                    image_path,
+                    detector_conf,
+                    last_ts.isoformat(timespec="seconds"),
+                    frames,
+                ),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
 
     # --- human-in-the-loop verification ----------------------------------
     def list_unverified(self, limit: int = 40) -> list[dict]:
         """Recent visits awaiting review (least-confident first), with a crop."""
-        rows = self._conn.execute(
-            "SELECT id, ts, species, confidence, image_path FROM sightings "
-            "WHERE verified_species IS NULL AND image_path IS NOT NULL "
-            "ORDER BY confidence ASC, ts DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, ts, species, confidence, image_path FROM sightings "
+                "WHERE verified_species IS NULL AND image_path IS NOT NULL "
+                "ORDER BY confidence ASC, ts DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def set_verified(self, sighting_id: int, species: str) -> None:
-        self._conn.execute(
-            "UPDATE sightings SET verified_species = ? WHERE id = ?",
-            (species, int(sighting_id)),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE sightings SET verified_species = ? WHERE id = ?",
+                (species, int(sighting_id)),
+            )
+            self._conn.commit()
 
     def review_counts(self) -> tuple[int, int]:
         """(verified, total) sightings — for a progress readout."""
-        total = self._conn.execute("SELECT COUNT(*) FROM sightings").fetchone()[0]
-        ver = self._conn.execute(
-            "SELECT COUNT(*) FROM sightings WHERE verified_species IS NOT NULL"
-        ).fetchone()[0]
+        with self._lock:
+            total = self._conn.execute("SELECT COUNT(*) FROM sightings").fetchone()[0]
+            ver = self._conn.execute(
+                "SELECT COUNT(*) FROM sightings WHERE verified_species IS NOT NULL"
+            ).fetchone()[0]
         return int(ver), int(total)
 
     # --- reads for the UI -------------------------------------------------
     def recent_visits(self, limit: int = 14) -> list[dict]:
         """Most recent visits (newest first) for the live activity feed."""
-        rows = self._conn.execute(
-            "SELECT id, ts, last_ts, COALESCE(verified_species, species) AS species, "
-            "confidence, image_path, frames FROM sightings ORDER BY ts DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, ts, last_ts, COALESCE(verified_species, species) AS species, "
+                "confidence, image_path, frames FROM sightings ORDER BY ts DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [dict(r) for r in rows]
 
     def day_hours(self, day: date) -> dict:
         """Per-species hourly counts for one day (0..23), for the day-drill view."""
         start = datetime.combine(day, datetime.min.time())
         end = start + timedelta(days=1)
-        rows = self._conn.execute(
-            "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence "
-            "FROM sightings WHERE ts >= ? AND ts < ? ORDER BY ts ASC",
-            (start.isoformat(), end.isoformat()),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence "
+                "FROM sightings WHERE ts >= ? AND ts < ? ORDER BY ts ASC",
+                (start.isoformat(), end.isoformat()),
+            ).fetchall()
 
         agg: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
         for r in rows:
@@ -146,11 +164,12 @@ class Database:
     def week_grid(self, week_start: date) -> dict:
         """Build the weekly grid payload (Sun..Sat). Each visit counts once."""
         week_end = week_start + timedelta(days=7)
-        rows = self._conn.execute(
-            "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence FROM sightings"
-            " WHERE ts >= ? AND ts < ? ORDER BY ts ASC",
-            (week_start.isoformat(), week_end.isoformat()),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence FROM sightings"
+                " WHERE ts >= ? AND ts < ? ORDER BY ts ASC",
+                (week_start.isoformat(), week_end.isoformat()),
+            ).fetchall()
 
         agg: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
         for r in rows:

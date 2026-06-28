@@ -85,6 +85,9 @@ class PipelineConfig:
     # Shared secret for the ingest endpoint: the sender includes it, the
     # receiver (web app, same field in its config) checks it.
     ingest_token: str = ""
+    # Safety cap on a single decoded ingest image (bytes). Rejects oversized
+    # uploads before writing to disk. Default 8 MB — generous for a feeder crop.
+    max_image_bytes: int = 8_000_000
 
 
 @dataclass
@@ -92,6 +95,9 @@ class WebConfig:
     host: str = "127.0.0.1"
     port: int = 8000
     debug: bool = False
+    # Max accepted request body (bytes) for any endpoint, incl. /api/ingest.
+    # Flask returns 413 above this before reading the body. Default 12 MB.
+    max_content_length: int = 12_000_000
 
 
 @dataclass

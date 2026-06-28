@@ -7,7 +7,11 @@ both — "both" means confirmed at the feeder, not just in earshot.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hmac
 import json
+import re
 from datetime import date, timedelta
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
@@ -19,6 +23,27 @@ from ..weather import hourly_weather
 
 DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 REFERENCE_DIR = PROJECT_ROOT / "assets" / "reference"
+
+# Filename-safe slug: lowercase, only [a-z0-9-], collapsed. Used for the
+# server-generated capture filename so a hostile `species` value can never inject
+# path separators, "..", or other surprises into the write path.
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _safe_slug(name: str, *, fallback: str = "bird", max_len: int = 40) -> str:
+    slug = _SLUG_RE.sub("-", (name or "").lower()).strip("-")
+    return (slug[:max_len].strip("-")) or fallback
+
+
+def _parse_date_arg(value: str | None, default: date) -> date | None:
+    """Parse a YYYY-MM-DD query arg. Returns default when absent, None when
+    present-but-invalid (so the caller can emit a clean 400 instead of a 500)."""
+    if not value:
+        return default
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def _ref_url(reference_image: str | None) -> str | None:
@@ -39,6 +64,9 @@ def _load_catalog() -> tuple[dict, dict]:
 def create_app(cfg: Config | None = None) -> Flask:
     cfg = cfg or load_config()
     app = Flask(__name__)
+    # Reject oversized request bodies up front (returns 413). Protects the
+    # base64 image upload path on /api/ingest from memory-exhaustion on the Pi.
+    app.config["MAX_CONTENT_LENGTH"] = cfg.web.max_content_length
     captures_dir = cfg.paths.captures_path()
     region, catalog = _load_catalog()
     sci_to_common = {
@@ -60,9 +88,9 @@ def create_app(cfg: Config | None = None) -> Flask:
     @app.route("/api/week")
     def api_week():
         start_param = request.args.get("start")
-        week_start = (
-            date.fromisoformat(start_param) if start_param else week_start_for(date.today())
-        )
+        week_start = _parse_date_arg(start_param, week_start_for(date.today()))
+        if week_start is None:
+            return jsonify({"error": "bad 'start' date — expected YYYY-MM-DD"}), 400
         grid = get_db().week_grid(week_start)
         heard = birdnet.heard_week(week_start, sci_to_common)
 
@@ -131,7 +159,9 @@ def create_app(cfg: Config | None = None) -> Flask:
     def api_day():
         """Hourly drill-down for one day: species x 24h counts + a weather row."""
         dparam = request.args.get("date")
-        day = date.fromisoformat(dparam) if dparam else date.today()
+        day = _parse_date_arg(dparam, date.today())
+        if day is None:
+            return jsonify({"error": "bad 'date' — expected YYYY-MM-DD"}), 400
         grid = get_db().day_hours(day)
 
         species = []
@@ -208,37 +238,53 @@ def create_app(cfg: Config | None = None) -> Flask:
     @app.route("/api/ingest", methods=["POST"])
     def ingest():
         """Receive a visit (metadata + best crop) from a remote watcher (e.g. the PC)."""
-        import base64
         from datetime import datetime
 
         data = request.get_json(force=True, silent=True) or {}
         expected = cfg.pipeline.ingest_token
-        if expected and data.get("token") != expected:
+        # Constant-time compare so a LAN attacker can't brute-force the shared
+        # secret by timing. Always compares to avoid an early-out timing oracle.
+        if expected and not hmac.compare_digest(str(data.get("token", "")), str(expected)):
             return jsonify({"error": "forbidden"}), 403
         try:
             first = datetime.fromisoformat(data["first_ts"])
-        except (KeyError, ValueError):
+        except (KeyError, ValueError, TypeError):
             return jsonify({"error": "bad or missing first_ts"}), 400
-        last = datetime.fromisoformat(data["last_ts"]) if data.get("last_ts") else first
-        species = data.get("species", "Unknown bird")
+        try:
+            last = datetime.fromisoformat(data["last_ts"]) if data.get("last_ts") else first
+        except (ValueError, TypeError):
+            return jsonify({"error": "bad last_ts"}), 400
+        species = str(data.get("species", "Unknown bird"))[:120]
 
         rel = None
         if data.get("image_b64"):
+            try:
+                raw = base64.b64decode(str(data["image_b64"]), validate=True)
+            except (binascii.Error, ValueError):
+                return jsonify({"error": "bad image_b64"}), 400
+            if len(raw) > cfg.pipeline.max_image_bytes:
+                return jsonify({"error": "image too large"}), 413
             day_dir = captures_dir / first.strftime("%Y-%m-%d")
             day_dir.mkdir(parents=True, exist_ok=True)
-            slug = species.lower().replace(" ", "-").replace("/", "-")
-            out = day_dir / f"{slug}_{first.strftime('%H%M%S')}.jpg"
-            out.write_bytes(base64.b64decode(data["image_b64"]))
+            # Server-generated, path-safe filename — never trust client input here.
+            out = day_dir / f"{_safe_slug(species)}_{first.strftime('%H%M%S')}.jpg"
+            out.write_bytes(raw)
             rel = str(out.relative_to(captures_dir)).replace("\\", "/")
+
+        try:
+            confidence = float(data.get("confidence", 0))
+            frames = int(data.get("frames", 1))
+        except (ValueError, TypeError):
+            return jsonify({"error": "bad confidence or frames"}), 400
 
         get_db().add_visit(
             species=species,
-            confidence=float(data.get("confidence", 0)),
+            confidence=confidence,
             image_path=rel,
             detector_conf=data.get("detector_conf"),
             first_ts=first,
             last_ts=last,
-            frames=int(data.get("frames", 1)),
+            frames=frames,
         )
         return jsonify({"ok": True})
 
