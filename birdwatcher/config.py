@@ -113,6 +113,14 @@ class AudioConfig:
 
 
 @dataclass
+class WeatherConfig:
+    # Per-hour weather row above the day-drill view (Open-Meteo, no API key).
+    enabled: bool = True
+    latitude: float = 33.94    # Cobb County, GA (Marietta) — matches the catalog region
+    longitude: float = -84.55
+
+
+@dataclass
 class Config:
     camera: CameraConfig = field(default_factory=CameraConfig)
     motion: MotionConfig = field(default_factory=MotionConfig)
@@ -122,6 +130,7 @@ class Config:
     web: WebConfig = field(default_factory=WebConfig)
     paths: Paths = field(default_factory=Paths)
     audio: AudioConfig = field(default_factory=AudioConfig)
+    weather: WeatherConfig = field(default_factory=WeatherConfig)
 
 
 def _resolve(p: str | os.PathLike[str]) -> Path:

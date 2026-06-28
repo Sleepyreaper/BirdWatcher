@@ -15,6 +15,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 from ..birdnetgo import BirdnetGoReader
 from ..config import PROJECT_ROOT, Config, load_config
 from ..database import Database, week_start_for
+from ..weather import hourly_weather
 
 DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 REFERENCE_DIR = PROJECT_ROOT / "assets" / "reference"
@@ -123,6 +124,46 @@ def create_app(cfg: Config | None = None) -> Flask:
                 "species_heard": len(heard),
                 "on_list": len(catalog_list),
                 "busiest_day": DAYS[per_day.index(max(per_day))] if total else "—",
+            },
+        })
+
+    @app.route("/api/day")
+    def api_day():
+        """Hourly drill-down for one day: species x 24h counts + a weather row."""
+        dparam = request.args.get("date")
+        day = date.fromisoformat(dparam) if dparam else date.today()
+        grid = get_db().day_hours(day)
+
+        species = []
+        per_hour = [0] * 24
+        for sp in grid["species"]:
+            meta = catalog.get(sp["name"], {})
+            species.append({
+                **sp,
+                "scientific": meta.get("scientific_name"),
+                "reference": _ref_url(meta.get("reference_image")),
+            })
+            for h, c in enumerate(sp["counts"]):
+                per_hour[h] += c
+
+        wx = []
+        if cfg.weather.enabled:
+            wx = hourly_weather(day, cfg.weather.latitude, cfg.weather.longitude)
+
+        total = sum(per_hour)
+        busiest = per_hour.index(max(per_hour)) if total else None
+        return jsonify({
+            "date": day.isoformat(),
+            "hours": grid["hours"],
+            "species": species,
+            "weather": wx,
+            "region": region,
+            "is_today": day == date.today(),
+            "stats": {
+                "visits": total,
+                "species_seen": len(species),
+                "busiest_hour": (f"{busiest % 12 or 12}{'am' if busiest < 12 else 'pm'}"
+                                 if busiest is not None else "—"),
             },
         })
 

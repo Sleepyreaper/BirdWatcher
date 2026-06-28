@@ -115,6 +115,34 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def day_hours(self, day: date) -> dict:
+        """Per-species hourly counts for one day (0..23), for the day-drill view."""
+        start = datetime.combine(day, datetime.min.time())
+        end = start + timedelta(days=1)
+        rows = self._conn.execute(
+            "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence "
+            "FROM sightings WHERE ts >= ? AND ts < ? ORDER BY ts ASC",
+            (start.isoformat(), end.isoformat()),
+        ).fetchall()
+
+        agg: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
+        for r in rows:
+            ts = datetime.fromisoformat(r["ts"])
+            agg[r["species"]][ts.hour].append((r["image_path"], r["confidence"]))
+
+        species_payload = []
+        for name, by_hour in agg.items():
+            counts = [len(by_hour.get(h, [])) for h in range(24)]
+            best = max(
+                (item for hour in by_hour.values() for item in hour),
+                key=lambda x: x[1], default=(None, 0),
+            )
+            species_payload.append({
+                "name": name, "thumb": best[0], "total": sum(counts), "counts": counts,
+            })
+        species_payload.sort(key=lambda s: s["total"], reverse=True)
+        return {"date": day.isoformat(), "hours": list(range(24)), "species": species_payload}
+
     def week_grid(self, week_start: date) -> dict:
         """Build the weekly grid payload (Sun..Sat). Each visit counts once."""
         week_end = week_start + timedelta(days=7)

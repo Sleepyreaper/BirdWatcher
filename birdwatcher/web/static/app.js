@@ -5,6 +5,9 @@ const PAIRS = [["#CECBF6","#26215C"],["#F5C4B3","#4A1B0C"],["#9FE1CB","#04342C"]
   ["#F4C0D1","#4B1528"],["#B5D4F4","#042C53"],["#C0DD97","#173404"],
   ["#FAC775","#412402"],["#F7C1C1","#501313"]];
 let currentStart = null;
+let currentDay = null;
+let view = "week";          // "week" heat-grid | "day" hourly drill-down
+let loadSeq = 0;            // last navigation wins, even if an older fetch returns later
 const LAST = {};  // last-seen count per cell, to pulse when it rises
 
 function el(tag, cls, html) {
@@ -26,16 +29,21 @@ function heat(c) { if (!c) return null; return c >= 10 ? ["#185FA5","#fff"] : c 
 function heatT(c) { if (!c) return null; return c >= 10 ? ["#0F6E56","#fff"] : c >= 6 ? ["#1D9E75","#fff"] : c >= 3 ? ["#5DCAA5","#04342C"] : ["#9FE1CB","#04342C"]; }
 
 async function loadWeek(start) {
+  const seq = ++loadSeq;
   const url = start ? `/api/week?start=${start}` : "/api/week";
   const d = await (await fetch(url)).json();
+  if (seq !== loadSeq) return;   // superseded by a newer navigation
   currentStart = d.start;
   render(d);
 }
 
 function render(d) {
   document.getElementById("region").textContent = `${d.region.name || ""} · ${fmt(d.days[0])} – ${fmt(d.days[6])}`;
+  view = "week";
+  document.getElementById("grid").className = "grid";
   document.getElementById("weeklabel").textContent = d.is_current ? "this week" : `${fmt(d.days[0])}`;
-  document.getElementById("today").disabled = d.is_current;  // greyed when already here, so it's not a confusing no-op
+  const tbtn = document.getElementById("today");
+  tbtn.textContent = "today"; tbtn.disabled = false; tbtn.title = "Today, hour by hour";
 
   const s = document.getElementById("stats");
   s.innerHTML = "";
@@ -57,7 +65,9 @@ function render(d) {
   });
   g.append(head);
 
-  document.getElementById("empty").hidden = d.seen.length > 0 || d.heard_only.length > 0;
+  const emptyEl = document.getElementById("empty");
+  emptyEl.textContent = "No birds yet this week — the feeder's listening.";
+  emptyEl.hidden = d.seen.length > 0 || d.heard_only.length > 0;
   d.seen.forEach((sp) => g.append(seenRow(sp, d, today)));
 
   if (d.heard_only.length) {
@@ -131,6 +141,78 @@ function renderNow(d, today) {
   card.hidden = false;
 }
 
+// --- hourly "today" drill-down ----------------------------------------------
+async function loadDay(dateIso) {
+  const seq = ++loadSeq;
+  const url = dateIso ? `/api/day?date=${dateIso}` : "/api/day";
+  const d = await (await fetch(url)).json();
+  if (seq !== loadSeq) return;   // superseded by a newer navigation
+  renderDay(d);
+}
+function hourLabel(h) { return `${h % 12 || 12}${h < 12 ? "a" : "p"}`; }
+function prettyDay(isoStr) { return new Date(isoStr + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }); }
+
+function renderDay(d) {
+  view = "day"; currentDay = d.date;
+  document.getElementById("region").textContent = `${d.region.name || ""} · ${prettyDay(d.date)}`;
+  document.getElementById("weeklabel").textContent = d.is_today ? "today" : prettyDay(d.date);
+  const tbtn = document.getElementById("today");
+  tbtn.textContent = "week"; tbtn.disabled = false; tbtn.title = "Back to the week";
+
+  const s = document.getElementById("stats");
+  s.innerHTML = "";
+  s.append(stat(d.stats.visits, "visits"), stat(d.stats.species_seen, "species"), stat(d.stats.busiest_hour, "busiest hour"));
+  if (d.weather && d.weather.length) {
+    const w = d.weather.find((x) => x.hour === new Date().getHours()) || d.weather[d.weather.length - 1];
+    if (w && w.temp != null) s.append(stat(`${Math.round(w.temp)}°`, `${w.icon} ${w.label}`.trim()));
+  }
+  document.getElementById("legend-note").innerHTML = "";
+
+  const g = document.getElementById("grid");
+  g.className = "grid hourly";
+  g.innerHTML = "";
+  const nowH = d.is_today ? new Date().getHours() : -1;
+
+  if (d.weather && d.weather.length) {
+    const byHour = {};
+    d.weather.forEach((w) => (byHour[w.hour] = w));
+    const wrow = el("div", "row head");
+    wrow.append(el("div", "species", `<span class="hlabel">Weather</span>`));
+    d.hours.forEach((h) => {
+      const w = byHour[h];
+      const cell = el("div", "wxcell" + (h === nowH ? " now" : ""), w ? w.icon : "");
+      if (w) cell.title = `${hourLabel(h)} · ${w.label}` + (w.temp != null ? ` · ${Math.round(w.temp)}°` : "");
+      wrow.append(cell);
+    });
+    g.append(wrow);
+  }
+
+  const head = el("div", "row head");
+  head.append(el("div", "species", `<span class="hlabel">Species</span>`));
+  d.hours.forEach((h) => head.append(el("div", "daycol" + (h === nowH ? " today" : ""), h % 3 === 0 ? hourLabel(h) : "")));
+  g.append(head);
+
+  const emptyEl = document.getElementById("empty");
+  emptyEl.textContent = "No visits recorded for this day.";
+  emptyEl.hidden = d.species.length > 0;
+  d.species.forEach((sp) => g.append(hourRow(sp, nowH)));
+
+  document.getElementById("nowcard").hidden = true;
+}
+
+function hourRow(sp, nowH) {
+  const row = el("div", "row srow");
+  const sub = `${sp.total} visit${sp.total === 1 ? "" : "s"}` + (sp.scientific ? ` · ${sp.scientific}` : "");
+  row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub">${sub}</div></div>`));
+  sp.counts.forEach((c, h) => {
+    const cell = el("div", "cell" + (c ? " has" : "") + (h === nowH ? " today" : ""));
+    const col = heat(c);
+    if (col) { cell.style.background = col[0]; cell.style.color = col[1]; cell.textContent = c; cell.title = `${sp.name} · ${hourLabel(h)} · ${c} visit(s)`; }
+    row.append(cell);
+  });
+  return row;
+}
+
 function openDetail(sp, dayIdx, dayIso) {
   const body = document.getElementById("lb-body");
   const ref = sp.reference ? `<figure><img src="${sp.reference}"><figcaption>field guide</figcaption></figure>` : "";
@@ -165,16 +247,6 @@ function recentPhoto(it) {
   const [bg, fg] = pairFor(it.name);
   return `<div class="ph-badge" style="background:${bg};color:${fg}">${initials(it.name)}</div>`;
 }
-function rcard(it) {
-  const card = el("div", "rcard");
-  const sub = it.kind === "heard"
-    ? `<span class="heard">🔊 heard</span>`
-    : (it.confidence ? `${Math.round(it.confidence * 100)}%` : "seen");
-  card.innerHTML = `${recentPhoto(it)}<div class="rnm">${it.name}</div>` +
-    `<div class="rsub"><span>${ago(it.ts)}</span>${sub}</div>`;
-  card.onclick = () => openShot(it);
-  return card;
-}
 function openShot(it) {
   const body = document.getElementById("lb-body");
   const cap = (it.kind === "seen" && it.thumb) ? `<figure><img src="/captures/${it.thumb}"><figcaption>caught at the feeder</figcaption></figure>` : "";
@@ -187,14 +259,22 @@ function openShot(it) {
     `<div class="kv"><span>${ago(it.ts)}</span><span>${it.kind === "seen" && it.confidence ? Math.round(it.confidence * 100) + "% match" : ""}</span></div>`;
   document.getElementById("lightbox").hidden = false;
 }
+// one "last visited" card — the full history lives in the grid below
 async function loadRecent() {
   let d;
-  try { d = await (await fetch("/api/recent?limit=14")).json(); } catch { return; }
+  try { d = await (await fetch("/api/recent?limit=8")).json(); } catch { return; }
   const wrap = document.getElementById("recent");
-  const strip = document.getElementById("recent-strip");
-  if (!d.items || !d.items.length) { wrap.hidden = true; return; }
-  strip.innerHTML = "";
-  d.items.forEach((it) => strip.append(rcard(it)));
+  const card = document.getElementById("lv-card");
+  const items = d.items || [];
+  const it = items.find((x) => x.kind === "seen") || items[0];
+  if (!it) { wrap.hidden = true; return; }
+  const tag = it.kind === "heard"
+    ? `<span class="heard">🔊 heard</span>`
+    : (it.confidence ? `${Math.round(it.confidence * 100)}% match` : "");
+  card.innerHTML =
+    `${recentPhoto(it)}<div class="lv-meta"><div class="lv-label">last visited</div>` +
+    `<div class="lv-name">${it.name}</div><div class="lv-sub">${ago(it.ts)}${tag ? " · " + tag : ""}</div></div>`;
+  card.onclick = () => openShot(it);
   wrap.hidden = false;
 }
 
@@ -204,13 +284,18 @@ applyTheme(localStorage.getItem("bw-theme") || "light");
 document.getElementById("theme").onclick = () =>
   applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
 
-document.getElementById("prev").onclick = () => shift(-7);
-document.getElementById("next").onclick = () => shift(7);
-document.getElementById("today").onclick = () => loadWeek(null);
+document.getElementById("prev").onclick = () => step(-1);
+document.getElementById("next").onclick = () => step(1);
+document.getElementById("today").onclick = () => { view === "day" ? loadWeek(currentStart) : loadDay(null); };
 document.getElementById("lb-close").onclick = () => (document.getElementById("lightbox").hidden = true);
 document.getElementById("lightbox").onclick = (e) => { if (e.target.id === "lightbox") e.target.hidden = true; };
-function shift(days) { const dt = new Date(currentStart + "T00:00:00"); dt.setDate(dt.getDate() + days); loadWeek(dt.toISOString().slice(0, 10)); }
+function iso(dt) { return dt.toISOString().slice(0, 10); }
+function step(dir) {
+  if (view === "day") { const dt = new Date(currentDay + "T00:00:00"); dt.setDate(dt.getDate() + dir); loadDay(iso(dt)); }
+  else { const dt = new Date(currentStart + "T00:00:00"); dt.setDate(dt.getDate() + 7 * dir); loadWeek(iso(dt)); }
+}
+function refresh() { view === "day" ? loadDay(currentDay) : loadWeek(currentStart); loadRecent(); }
 
 loadWeek(null);
 loadRecent();
-setInterval(() => { loadWeek(currentStart); loadRecent(); }, 30000);
+setInterval(refresh, 30000);

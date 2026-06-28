@@ -28,7 +28,9 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 24px; position: sticky; top: 0; background: var(--bg); z-index: 5;
+  max-width: 600px; margin: 0 auto;
 }
+.page { max-width: 600px; margin: 0 auto; }
 .brand h1 { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: .2px; }
 .brand .region { font-size: .78rem; color: var(--text-soft); margin-top: 1px; }
 .topbar .right { display: flex; align-items: center; gap: 10px; }
@@ -47,24 +49,33 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .stat .num { font-size: 1.5rem; font-weight: 600; line-height: 1.1; }
 .stat .lbl { font-size: .72rem; color: var(--text-muted); margin-top: 3px; }
 
-/* live "latest at the feeder" strip */
-.recent { padding: 8px 24px 0; }
-.recent h3 { margin: 6px 0 9px; font-size: .82rem; font-weight: 600; color: var(--text-soft); }
-.recent-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
-.rcard { flex: none; width: 104px; cursor: pointer; }
-.rcard .phwrap { position: relative; }
-.rcard .ph { width: 104px; height: 104px; border-radius: 11px; object-fit: cover; background: var(--surface-soft); display: block; }
-.rcard:hover .ph { outline: 2px solid var(--accent); outline-offset: 1px; }
-.rcard .ph-badge { width: 104px; height: 104px; border-radius: 11px; display: grid; place-items: center; font-size: 26px; font-weight: 600; }
-.rcard .rsnd { position: absolute; top: 6px; right: 6px; font-size: 13px; background: rgba(8,14,22,.5); border-radius: 7px; padding: 1px 4px; }
-.rcard .rnm { font-size: .76rem; font-weight: 500; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rcard .rsub { font-size: .68rem; color: var(--text-muted); display: flex; justify-content: space-between; gap: 6px; margin-top: 1px; }
-.rcard .rsub .heard { color: var(--accent); }
+/* single "last visited" highlight (full history is in the grid below) */
+.lastvisit { padding: 10px 24px 2px; }
+.lv-card { display: inline-flex; align-items: center; gap: 12px; background: var(--surface-soft); border-radius: 13px; padding: 7px 16px 7px 7px; cursor: pointer; }
+.lv-card:hover { background: var(--surface); outline: 1px solid var(--line); }
+.lv-card .phwrap { position: relative; }
+.lv-card .ph { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; background: var(--surface); display: block; }
+.lv-card .ph-badge { width: 56px; height: 56px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; font-weight: 600; }
+.lv-card .rsnd { position: absolute; top: 4px; right: 4px; font-size: 11px; background: rgba(8,14,22,.5); border-radius: 6px; padding: 0 3px; }
+.lv-label { font-size: .62rem; text-transform: uppercase; letter-spacing: .6px; color: var(--text-muted); }
+.lv-name { font-size: 1rem; font-weight: 600; margin-top: 1px; }
+.lv-sub { font-size: .75rem; color: var(--text-soft); margin-top: 1px; }
+.lv-sub .heard { color: var(--accent); }
 
 .gridwrap { padding: 14px 24px 40px; overflow-x: auto; }
-.grid { display: block; min-width: 540px; }
+.grid { display: block; min-width: 460px; }
+.grid.hourly { min-width: 520px; }
 
-.row { display: grid; grid-template-columns: 180px repeat(7, minmax(34px, 46px)); gap: 4px; align-items: center; justify-content: start; }
+.row { display: grid; grid-template-columns: 164px repeat(7, 1fr); gap: 4px; align-items: center; }
+.grid.hourly .row { grid-template-columns: 88px repeat(24, 1fr); gap: 2px; }
+.grid.hourly .cell { border-radius: 3px; font-size: .56rem; }
+.grid.hourly .species { gap: 6px; }
+.grid.hourly .av, .grid.hourly .av-badge { width: 26px; height: 26px; border-radius: 6px; font-size: 9px; }
+.grid.hourly .species .nm { font-size: .74rem; }
+.grid.hourly .species .sub { font-size: .6rem; }
+.grid.hourly .row.head .daycol { font-size: .58rem; }
+.wxcell { display: grid; place-items: center; font-size: .8rem; min-height: 20px; }
+.wxcell.now { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 5px; }
 .row.head { padding-bottom: 4px; }
 .row.head .daycol { text-align: center; font-size: .72rem; color: var(--text-muted); line-height: 1.25; }
 .row.head .daycol .dnum { display: block; color: var(--text-soft); font-size: .92rem; font-weight: 500; }
