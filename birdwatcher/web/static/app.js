@@ -35,6 +35,7 @@ async function loadWeek(start) {
 function render(d) {
   document.getElementById("region").textContent = `${d.region.name || ""} · ${fmt(d.days[0])} – ${fmt(d.days[6])}`;
   document.getElementById("weeklabel").textContent = d.is_current ? "this week" : `${fmt(d.days[0])}`;
+  document.getElementById("today").disabled = d.is_current;  // greyed when already here, so it's not a confusing no-op
 
   const s = document.getElementById("stats");
   s.innerHTML = "";
@@ -148,6 +149,55 @@ function openDetail(sp, dayIdx, dayIso) {
 
 function stat(n, l) { return el("div", "stat", `<div class="num">${n}</div><div class="lbl">${l}</div>`); }
 
+// --- live "latest at the feeder" feed ---------------------------------------
+function ago(iso) {
+  const t = new Date(iso.length <= 10 ? iso + "T00:00:00" : iso);
+  const s = Math.max(0, (Date.now() - t.getTime()) / 1000);
+  if (s < 45) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  const days = Math.floor(s / 86400);
+  return days < 7 ? days + "d ago" : t.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+function recentPhoto(it) {
+  if (it.kind === "seen" && it.thumb) return `<img class="ph" src="/captures/${it.thumb}" alt="" loading="lazy">`;
+  if (it.reference) return `<div class="phwrap"><img class="ph" src="${it.reference}" alt="" loading="lazy">${it.kind === "heard" ? `<span class="rsnd">🔊</span>` : ""}</div>`;
+  const [bg, fg] = pairFor(it.name);
+  return `<div class="ph-badge" style="background:${bg};color:${fg}">${initials(it.name)}</div>`;
+}
+function rcard(it) {
+  const card = el("div", "rcard");
+  const sub = it.kind === "heard"
+    ? `<span class="heard">🔊 heard</span>`
+    : (it.confidence ? `${Math.round(it.confidence * 100)}%` : "seen");
+  card.innerHTML = `${recentPhoto(it)}<div class="rnm">${it.name}</div>` +
+    `<div class="rsub"><span>${ago(it.ts)}</span>${sub}</div>`;
+  card.onclick = () => openShot(it);
+  return card;
+}
+function openShot(it) {
+  const body = document.getElementById("lb-body");
+  const cap = (it.kind === "seen" && it.thumb) ? `<figure><img src="/captures/${it.thumb}"><figcaption>caught at the feeder</figcaption></figure>` : "";
+  const ref = it.reference ? `<figure><img src="${it.reference}"><figcaption>field guide</figcaption></figure>` : "";
+  body.innerHTML =
+    `<h3>${it.name}${it.kind === "heard" ? " 🔊" : ""}</h3>` +
+    `<div class="sci">${it.scientific || ""}</div>` +
+    `<div class="shots">${cap}${ref}</div>` +
+    (it.kind === "heard" ? `<div class="note heard">🔊 heard nearby — detected by sound (BirdNET-Go)</div>` : "") +
+    `<div class="kv"><span>${ago(it.ts)}</span><span>${it.kind === "seen" && it.confidence ? Math.round(it.confidence * 100) + "% match" : ""}</span></div>`;
+  document.getElementById("lightbox").hidden = false;
+}
+async function loadRecent() {
+  let d;
+  try { d = await (await fetch("/api/recent?limit=14")).json(); } catch { return; }
+  const wrap = document.getElementById("recent");
+  const strip = document.getElementById("recent-strip");
+  if (!d.items || !d.items.length) { wrap.hidden = true; return; }
+  strip.innerHTML = "";
+  d.items.forEach((it) => strip.append(rcard(it)));
+  wrap.hidden = false;
+}
+
 // theme
 function applyTheme(t) { document.documentElement.setAttribute("data-theme", t); localStorage.setItem("bw-theme", t); }
 applyTheme(localStorage.getItem("bw-theme") || "light");
@@ -162,4 +212,5 @@ document.getElementById("lightbox").onclick = (e) => { if (e.target.id === "ligh
 function shift(days) { const dt = new Date(currentStart + "T00:00:00"); dt.setDate(dt.getDate() + days); loadWeek(dt.toISOString().slice(0, 10)); }
 
 loadWeek(null);
-setInterval(() => loadWeek(currentStart), 30000);
+loadRecent();
+setInterval(() => { loadWeek(currentStart); loadRecent(); }, 30000);

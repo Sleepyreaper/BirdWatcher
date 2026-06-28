@@ -126,6 +126,36 @@ def create_app(cfg: Config | None = None) -> Flask:
             },
         })
 
+    @app.route("/api/recent")
+    def api_recent():
+        """Unified live feed: recent visits (seen, with photos) + heard detections."""
+        limit = int(request.args.get("limit", 14))
+        items = []
+        for v in get_db().recent_visits(limit):
+            meta = catalog.get(v["species"], {})
+            items.append({
+                "kind": "seen",
+                "name": v["species"],
+                "scientific": meta.get("scientific_name"),
+                "reference": _ref_url(meta.get("reference_image")),
+                "thumb": v["image_path"],
+                "confidence": v["confidence"],
+                "ts": v["last_ts"] or v["ts"],
+            })
+        for h in birdnet.recent(sci_to_common, limit):
+            meta = catalog.get(h["name"], {})
+            items.append({
+                "kind": "heard",
+                "name": h["name"],
+                "scientific": h["scientific"],
+                "reference": _ref_url(meta.get("reference_image")),
+                "thumb": None,
+                "confidence": h["confidence"],
+                "ts": h["ts"],
+            })
+        items.sort(key=lambda x: x["ts"], reverse=True)
+        return jsonify({"items": items[:limit], "audio_on": birdnet.available()})
+
     @app.route("/captures/<path:rel>")
     def captures(rel: str):
         return send_from_directory(captures_dir, rel)

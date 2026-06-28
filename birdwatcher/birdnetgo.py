@@ -55,3 +55,35 @@ class BirdnetGoReader:
             if 0 <= day < 7:
                 out.setdefault(common, [0] * 7)[day] += 1
         return out
+
+    def recent(self, sci_to_common: dict[str, str], limit: int = 14) -> list[dict]:
+        """Most recent heard detections (newest first), mapped to our catalog."""
+        if not self.available():
+            return []
+        try:
+            con = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True, timeout=2)
+            rows = con.execute(
+                "SELECT d.detected_at, d.confidence, l.scientific_name FROM detections d "
+                "JOIN labels l ON l.id = d.label_id "
+                "WHERE COALESCE(d.unlikely, 0) = 0 "
+                "ORDER BY d.detected_at DESC LIMIT ?",
+                (limit * 5,),  # over-fetch: most won't map to our 32-species catalog
+            ).fetchall()
+            con.close()
+        except Exception:
+            return []
+
+        out: list[dict] = []
+        for epoch, conf, sci in rows:
+            common = sci_to_common.get(sci)
+            if not common:
+                continue
+            out.append({
+                "name": common,
+                "scientific": sci,
+                "confidence": float(conf or 0),
+                "ts": datetime.fromtimestamp(epoch).isoformat(timespec="seconds"),
+            })
+            if len(out) >= limit:
+                break
+        return out

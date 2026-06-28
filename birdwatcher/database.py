@@ -106,6 +106,15 @@ class Database:
         return int(ver), int(total)
 
     # --- reads for the UI -------------------------------------------------
+    def recent_visits(self, limit: int = 14) -> list[dict]:
+        """Most recent visits (newest first) for the live activity feed."""
+        rows = self._conn.execute(
+            "SELECT id, ts, last_ts, COALESCE(verified_species, species) AS species, "
+            "confidence, image_path, frames FROM sightings ORDER BY ts DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
     def week_grid(self, week_start: date) -> dict:
         """Build the weekly grid payload (Sun..Sat). Each visit counts once."""
         week_end = week_start + timedelta(days=7)

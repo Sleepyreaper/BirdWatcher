@@ -39,6 +39,7 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
   display: grid; place-items: center;
 }
 .iconbtn:hover { color: var(--text); }
+.iconbtn:disabled { opacity: .38; cursor: default; }
 #weeklabel { min-width: 130px; text-align: center; }
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; padding: 6px 24px 4px; }
@@ -46,16 +47,30 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .stat .num { font-size: 1.5rem; font-weight: 600; line-height: 1.1; }
 .stat .lbl { font-size: .72rem; color: var(--text-muted); margin-top: 3px; }
 
+/* live "latest at the feeder" strip */
+.recent { padding: 8px 24px 0; }
+.recent h3 { margin: 6px 0 9px; font-size: .82rem; font-weight: 600; color: var(--text-soft); }
+.recent-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; }
+.rcard { flex: none; width: 104px; cursor: pointer; }
+.rcard .phwrap { position: relative; }
+.rcard .ph { width: 104px; height: 104px; border-radius: 11px; object-fit: cover; background: var(--surface-soft); display: block; }
+.rcard:hover .ph { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rcard .ph-badge { width: 104px; height: 104px; border-radius: 11px; display: grid; place-items: center; font-size: 26px; font-weight: 600; }
+.rcard .rsnd { position: absolute; top: 6px; right: 6px; font-size: 13px; background: rgba(8,14,22,.5); border-radius: 7px; padding: 1px 4px; }
+.rcard .rnm { font-size: .76rem; font-weight: 500; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rcard .rsub { font-size: .68rem; color: var(--text-muted); display: flex; justify-content: space-between; gap: 6px; margin-top: 1px; }
+.rcard .rsub .heard { color: var(--accent); }
+
 .gridwrap { padding: 14px 24px 40px; overflow-x: auto; }
 .grid { display: block; min-width: 540px; }
 
-.row { display: grid; grid-template-columns: 188px repeat(7, minmax(40px, 1fr)); gap: 6px; align-items: center; }
+.row { display: grid; grid-template-columns: 180px repeat(7, minmax(34px, 46px)); gap: 4px; align-items: center; justify-content: start; }
 .row.head { padding-bottom: 4px; }
 .row.head .daycol { text-align: center; font-size: .72rem; color: var(--text-muted); line-height: 1.25; }
 .row.head .daycol .dnum { display: block; color: var(--text-soft); font-size: .92rem; font-weight: 500; }
 .row.head .daycol.today { color: var(--accent); }
 .row.head .hlabel { font-size: .7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
-.srow { padding: 5px 0; }
+.srow { padding: 2px 0; }
 
 .species { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .av { width: 34px; height: 34px; border-radius: 9px; object-fit: cover; flex: none; background: var(--surface-soft); }
@@ -64,7 +79,7 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .species .sub { font-size: .7rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .cell {
-  aspect-ratio: 1 / 1; width: 100%; max-width: 52px; margin: 0 auto; border-radius: 8px;
+  aspect-ratio: 1 / 1; width: 100%; border-radius: 6px;
   background: var(--cell-empty); display: grid; place-items: center;
   font-size: .8rem; font-weight: 500; position: relative; transition: transform .08s ease;
 }
