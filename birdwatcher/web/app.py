@@ -171,6 +171,32 @@ def create_app(cfg: Config | None = None) -> Flask:
         )
         return jsonify({"ok": True})
 
+    # --- human-in-the-loop review ----------------------------------------
+    @app.route("/review")
+    def review():
+        return render_template("review.html")
+
+    @app.route("/api/unverified")
+    def api_unverified():
+        ver, total = get_db().review_counts()
+        return jsonify({
+            "visits": get_db().list_unverified(int(request.args.get("limit", 40))),
+            "species": [
+                {"name": n, "reference": _ref_url(sp.get("reference_image"))}
+                for n, sp in sorted(catalog.items())
+            ],
+            "progress": {"verified": ver, "total": total},
+        })
+
+    @app.route("/api/verify", methods=["POST"])
+    def api_verify():
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            get_db().set_verified(int(data["id"]), str(data["species"]))
+        except (KeyError, ValueError, TypeError):
+            return jsonify({"error": "bad id or species"}), 400
+        return jsonify({"ok": True})
+
     return app
 
 

@@ -5,6 +5,7 @@ const PAIRS = [["#CECBF6","#26215C"],["#F5C4B3","#4A1B0C"],["#9FE1CB","#04342C"]
   ["#F4C0D1","#4B1528"],["#B5D4F4","#042C53"],["#C0DD97","#173404"],
   ["#FAC775","#412402"],["#F7C1C1","#501313"]];
 let currentStart = null;
+const LAST = {};  // last-seen count per cell, to pulse when it rises
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -70,10 +71,11 @@ function render(d) {
   renderNow(d, today);
 }
 
-function cellFor(count, isToday, heard, ramp) {
+function cellFor(count, isToday, heard, ramp, key) {
   const cell = el("div", "cell" + (count ? " has" : "") + (isToday ? " today" : ""));
   const col = ramp(count);
   if (col) { cell.style.background = col[0]; cell.style.color = col[1]; cell.innerHTML = count + (heard ? `<span class="snd">🔊</span>` : ""); }
+  if (key) { if (LAST[key] != null && count > LAST[key]) cell.classList.add("pulse"); LAST[key] = count; }
   return cell;
 }
 
@@ -83,7 +85,7 @@ function seenRow(sp, d, today) {
   row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub">${sub}</div></div>`));
   sp.counts.forEach((c, i) => {
     const heard = sp.heard && sp.heard[i] > 0;
-    const cell = cellFor(c, d.days[i] === today, c && heard, heat);
+    const cell = cellFor(c, d.days[i] === today, c && heard, heat, `${currentStart}|${sp.name}|${i}`);
     if (c) { cell.title = `${sp.name} — ${d.days[i]}\n${c} visit(s)` + (heard ? " · also heard 🔊" : ""); cell.onclick = () => openDetail(sp, i, d.days[i]); }
     row.append(cell);
   });
@@ -94,7 +96,7 @@ function heardRow(sp, d, today) {
   const row = el("div", "row srow");
   row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub" style="color:var(--accent)">heard${sp.scientific ? ` · ${sp.scientific}` : ""}</div></div>`));
   sp.heard.forEach((h, i) => {
-    const cell = cellFor(h, d.days[i] === today, false, heatT);
+    const cell = cellFor(h, d.days[i] === today, false, heatT, `${currentStart}|H|${sp.name}|${i}`);
     if (h) cell.title = `${sp.name} — ${d.days[i]}\nheard ${h}× 🔊 (not seen at the feeder)`;
     row.append(cell);
   });

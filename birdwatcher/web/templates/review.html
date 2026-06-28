@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Review IDs · BirdWatcher</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    .rwrap { padding: 8px 24px 48px; max-width: 920px; }
+    .rcard { display: grid; grid-template-columns: 200px 1fr 150px; gap: 18px; align-items: center;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+    .rcard .crop { width: 200px; height: 200px; object-fit: cover; border-radius: 10px; background: var(--surface-soft); }
+    .rcard .guess { font-size: .95rem; }
+    .rcard .guess b { font-weight: 600; }
+    .rcard .pick { margin: 14px 0; font-size: .85rem; color: var(--text-soft); }
+    .rcard select { font-size: .95rem; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line);
+      background: var(--surface); color: var(--text); width: 100%; max-width: 280px; margin-top: 6px; }
+    .acts { display: flex; gap: 10px; margin-top: 8px; }
+    .acts button { font-size: .9rem; padding: 9px 16px; border-radius: 9px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+    .acts .confirm { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+    .acts .confirm:hover { filter: brightness(1.08); }
+    .refbox { margin: 0; text-align: center; }
+    .refbox .ref { width: 130px; height: 130px; object-fit: cover; border-radius: 10px; background: var(--surface-soft); }
+    .refbox figcaption { font-size: .72rem; color: var(--text-muted); margin-top: 5px; }
+    .done { text-align: center; color: var(--text-muted); padding: 50px; font-size: 1rem; }
+    .lead { color: var(--text-soft); font-size: .85rem; margin: 0 0 14px; }
+    @media (max-width: 640px){ .rcard{ grid-template-columns: 1fr; } .rcard .crop{ width:100%; height:auto; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>✎ Review IDs</h1>
+      <div class="region" id="progress">…</div>
+    </div>
+    <div class="right">
+      <a class="iconbtn" href="/" title="Back to dashboard" style="width:auto;padding:0 10px;font-size:.8rem;text-decoration:none">dashboard</a>
+      <button class="iconbtn" id="theme" title="Toggle light / dark">◐</button>
+    </div>
+  </header>
+
+  <main class="rwrap">
+    <p class="lead">Confirm the species or pick the right one. We show the least-confident guesses first — your corrections become the training set that teaches the model your birds.</p>
+    <div id="cards"></div>
+  </main>
+
+  <script>
+    function applyTheme(t){ document.documentElement.setAttribute("data-theme", t); localStorage.setItem("bw-theme", t); }
+    applyTheme(localStorage.getItem("bw-theme") || "light");
+    document.getElementById("theme").onclick = () =>
+      applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
+
+    let SPECIES = [], refMap = {};
+    function options(sel) { return SPECIES.map((s) => `<option ${s.name === sel ? "selected" : ""}>${s.name}</option>`).join(""); }
+
+    function card(v) {
+      const c = document.createElement("div"); c.className = "rcard";
+      const conf = Math.round((v.confidence || 0) * 100), guess = v.species;
+      c.innerHTML =
+        `<img class="crop" src="/captures/${v.image_path}" alt="captured bird">` +
+        `<div><div class="guess">model thinks <b>${guess}</b> · ${conf}%</div>` +
+        `<div class="pick">actually:<br><select>${options(guess)}</select></div>` +
+        `<div class="acts"><button class="confirm">✓ confirm</button><button class="skip">skip</button></div></div>` +
+        `<figure class="refbox"><img class="ref" src="${refMap[guess] || ""}" alt="reference"><figcaption>reference</figcaption></figure>`;
+      const sel = c.querySelector("select"), ref = c.querySelector(".ref");
+      sel.onchange = () => (ref.src = refMap[sel.value] || "");
+      c.querySelector(".confirm").onclick = async () => {
+        await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: v.id, species: sel.value }) });
+        c.remove(); done();
+      };
+      c.querySelector(".skip").onclick = () => { c.remove(); done(); };
+      return c;
+    }
+    function done() { if (!document.querySelectorAll(".rcard").length) document.getElementById("cards").innerHTML = `<div class="done">🎉 All caught up — nothing to review right now.</div>`; }
+
+    async function load() {
+      const d = await (await fetch("/api/unverified?limit=40")).json();
+      SPECIES = d.species; SPECIES.forEach((s) => (refMap[s.name] = s.reference));
+      document.getElementById("progress").textContent = `${d.progress.verified} of ${d.progress.total} sightings verified`;
+      const box = document.getElementById("cards"); box.innerHTML = "";
+      if (!d.visits.length) { done(); return; }
+      d.visits.forEach((v) => box.append(card(v)));
+    }
+    load();
+  </script>
+</body>
+</html>

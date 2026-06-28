@@ -63,6 +63,9 @@ class ClassifierConfig:
     tfhub_handle: str = "https://tfhub.dev/google/aiy/vision/classifier/birds_V1/1"
     # Claude model id (only used when backend == "claude"). Reads ANTHROPIC_API_KEY.
     claude_model: str = "claude-opus-4-8"
+    # BioCLIP model handle (open_clip). bioclip-2 is ~18% more accurate than v1;
+    # falls back to v1 automatically if it can't be loaded.
+    bioclip_model: str = "hf-hub:imageomics/bioclip-2"
 
 
 @dataclass

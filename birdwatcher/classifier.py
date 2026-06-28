@@ -59,12 +59,18 @@ class BioClipClassifier(SpeciesClassifier):
         )
         self._names = [s["common_name"] for s in catalog["species"]]
 
-        model, _, preprocess = open_clip.create_model_and_transforms(
-            "hf-hub:imageomics/bioclip"
-        )
+        handle = cfg.bioclip_model or "hf-hub:imageomics/bioclip"
+        try:
+            model, _, preprocess = open_clip.create_model_and_transforms(handle)
+            tokenizer = open_clip.get_tokenizer(handle)
+        except Exception as e:  # bioclip-2 unavailable/incompatible -> fall back to v1
+            print(f"[classifier] {handle} failed ({e}); falling back to bioclip v1")
+            handle = "hf-hub:imageomics/bioclip"
+            model, _, preprocess = open_clip.create_model_and_transforms(handle)
+            tokenizer = open_clip.get_tokenizer(handle)
+        print(f"[classifier] bioclip model: {handle}")
         model.eval()
         self.model, self.preprocess = model, preprocess
-        tokenizer = open_clip.get_tokenizer("hf-hub:imageomics/bioclip")
         with torch.no_grad():
             txt = model.encode_text(tokenizer([f"a photo of {n}." for n in self._names]))
             txt /= txt.norm(dim=-1, keepdim=True)

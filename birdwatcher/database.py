@@ -27,7 +27,8 @@ CREATE INDEX IF NOT EXISTS idx_sightings_species ON sightings(species);
 """
 
 # Columns added after the first release; applied to existing DBs at startup.
-_MIGRATIONS = [("last_ts", "TEXT"), ("frames", "INTEGER DEFAULT 1")]
+_MIGRATIONS = [("last_ts", "TEXT"), ("frames", "INTEGER DEFAULT 1"),
+               ("verified_species", "TEXT")]
 
 
 class Database:
@@ -78,12 +79,38 @@ class Database:
         self._conn.commit()
         return int(cur.lastrowid)
 
+    # --- human-in-the-loop verification ----------------------------------
+    def list_unverified(self, limit: int = 40) -> list[dict]:
+        """Recent visits awaiting review (least-confident first), with a crop."""
+        rows = self._conn.execute(
+            "SELECT id, ts, species, confidence, image_path FROM sightings "
+            "WHERE verified_species IS NULL AND image_path IS NOT NULL "
+            "ORDER BY confidence ASC, ts DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def set_verified(self, sighting_id: int, species: str) -> None:
+        self._conn.execute(
+            "UPDATE sightings SET verified_species = ? WHERE id = ?",
+            (species, int(sighting_id)),
+        )
+        self._conn.commit()
+
+    def review_counts(self) -> tuple[int, int]:
+        """(verified, total) sightings — for a progress readout."""
+        total = self._conn.execute("SELECT COUNT(*) FROM sightings").fetchone()[0]
+        ver = self._conn.execute(
+            "SELECT COUNT(*) FROM sightings WHERE verified_species IS NOT NULL"
+        ).fetchone()[0]
+        return int(ver), int(total)
+
     # --- reads for the UI -------------------------------------------------
     def week_grid(self, week_start: date) -> dict:
         """Build the weekly grid payload (Sun..Sat). Each visit counts once."""
         week_end = week_start + timedelta(days=7)
         rows = self._conn.execute(
-            "SELECT ts, species, image_path, confidence FROM sightings"
+            "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence FROM sightings"
             " WHERE ts >= ? AND ts < ? ORDER BY ts ASC",
             (week_start.isoformat(), week_end.isoformat()),
         ).fetchall()
