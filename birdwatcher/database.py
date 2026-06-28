@@ -24,11 +24,20 @@ CREATE TABLE IF NOT EXISTS sightings (
 );
 CREATE INDEX IF NOT EXISTS idx_sightings_ts ON sightings(ts);
 CREATE INDEX IF NOT EXISTS idx_sightings_species ON sightings(species);
+
+CREATE TABLE IF NOT EXISTS library_examples (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    species     TEXT NOT NULL,
+    image_path  TEXT NOT NULL,
+    sighting_id INTEGER,
+    added_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_library_species ON library_examples(species);
 """
 
 # Columns added after the first release; applied to existing DBs at startup.
 _MIGRATIONS = [("last_ts", "TEXT"), ("frames", "INTEGER DEFAULT 1"),
-               ("verified_species", "TEXT")]
+               ("verified_species", "TEXT"), ("rejected", "INTEGER DEFAULT 0")]
 
 
 class Database:
@@ -85,6 +94,7 @@ class Database:
         rows = self._conn.execute(
             "SELECT id, ts, species, confidence, image_path FROM sightings "
             "WHERE verified_species IS NULL AND image_path IS NOT NULL "
+            "AND COALESCE(rejected, 0) = 0 "
             "ORDER BY confidence ASC, ts DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -99,18 +109,47 @@ class Database:
 
     def review_counts(self) -> tuple[int, int]:
         """(verified, total) sightings — for a progress readout."""
-        total = self._conn.execute("SELECT COUNT(*) FROM sightings").fetchone()[0]
+        total = self._conn.execute(
+            "SELECT COUNT(*) FROM sightings WHERE COALESCE(rejected, 0) = 0"
+        ).fetchone()[0]
         ver = self._conn.execute(
-            "SELECT COUNT(*) FROM sightings WHERE verified_species IS NOT NULL"
+            "SELECT COUNT(*) FROM sightings WHERE verified_species IS NOT NULL "
+            "AND COALESCE(rejected, 0) = 0"
         ).fetchone()[0]
         return int(ver), int(total)
+
+    def reject(self, sighting_id: int) -> None:
+        """Hide a bad capture everywhere (kept in the DB, just flagged)."""
+        self._conn.execute(
+            "UPDATE sightings SET rejected = 1 WHERE id = ?", (int(sighting_id),)
+        )
+        self._conn.commit()
+
+    # --- few-shot reference library (verified good crops) -----------------
+    def add_library_example(self, species: str, image_path: str,
+                            sighting_id: int | None = None) -> None:
+        """Record a confirmed good crop as a reference example for `species`."""
+        self._conn.execute(
+            "INSERT INTO library_examples (species, image_path, sighting_id, added_at) "
+            "VALUES (?, ?, ?, ?)",
+            (species, image_path, sighting_id, datetime.now().isoformat(timespec="seconds")),
+        )
+        self._conn.commit()
+
+    def library_counts(self) -> dict[str, int]:
+        """{species: number of saved reference crops}."""
+        rows = self._conn.execute(
+            "SELECT species, COUNT(*) AS c FROM library_examples GROUP BY species"
+        ).fetchall()
+        return {r["species"]: r["c"] for r in rows}
 
     # --- reads for the UI -------------------------------------------------
     def recent_visits(self, limit: int = 14) -> list[dict]:
         """Most recent visits (newest first) for the live activity feed."""
         rows = self._conn.execute(
             "SELECT id, ts, last_ts, COALESCE(verified_species, species) AS species, "
-            "confidence, image_path, frames FROM sightings ORDER BY ts DESC LIMIT ?",
+            "confidence, image_path, frames FROM sightings "
+            "WHERE COALESCE(rejected, 0) = 0 ORDER BY ts DESC LIMIT ?",
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -121,7 +160,7 @@ class Database:
         end = start + timedelta(days=1)
         rows = self._conn.execute(
             "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence "
-            "FROM sightings WHERE ts >= ? AND ts < ? ORDER BY ts ASC",
+            "FROM sightings WHERE ts >= ? AND ts < ? AND COALESCE(rejected, 0) = 0 ORDER BY ts ASC",
             (start.isoformat(), end.isoformat()),
         ).fetchall()
 
@@ -148,7 +187,7 @@ class Database:
         week_end = week_start + timedelta(days=7)
         rows = self._conn.execute(
             "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence FROM sightings"
-            " WHERE ts >= ? AND ts < ? ORDER BY ts ASC",
+            " WHERE ts >= ? AND ts < ? AND COALESCE(rejected, 0) = 0 ORDER BY ts ASC",
             (week_start.isoformat(), week_end.isoformat()),
         ).fetchall()
 

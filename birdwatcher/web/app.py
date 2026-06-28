@@ -40,6 +40,7 @@ def create_app(cfg: Config | None = None) -> Flask:
     cfg = cfg or load_config()
     app = Flask(__name__)
     captures_dir = cfg.paths.captures_path()
+    library_dir = captures_dir.parent / "library"   # verified good crops, per species
     region, catalog = _load_catalog()
     sci_to_common = {
         sp["scientific_name"]: name
@@ -205,6 +206,10 @@ def create_app(cfg: Config | None = None) -> Flask:
     def reference(rel: str):
         return send_from_directory(REFERENCE_DIR, rel)
 
+    @app.route("/library/<path:rel>")
+    def library(rel: str):
+        return send_from_directory(library_dir, rel)
+
     @app.route("/api/ingest", methods=["POST"])
     def ingest():
         """Receive a visit (metadata + best crop) from a remote watcher (e.g. the PC)."""
@@ -256,6 +261,7 @@ def create_app(cfg: Config | None = None) -> Flask:
                 {"name": n, "reference": _ref_url(sp.get("reference_image"))}
                 for n, sp in sorted(catalog.items())
             ],
+            "library": get_db().library_counts(),
             "progress": {"verified": ver, "total": total},
         })
 
@@ -267,6 +273,46 @@ def create_app(cfg: Config | None = None) -> Flask:
         except (KeyError, ValueError, TypeError):
             return jsonify({"error": "bad id or species"}), 400
         return jsonify({"ok": True})
+
+    @app.route("/api/reject", methods=["POST"])
+    def api_reject():
+        """Bad capture: flag it so it vanishes from the dashboard + feeds."""
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            get_db().reject(int(data["id"]))
+        except (KeyError, ValueError, TypeError):
+            return jsonify({"error": "bad id"}), 400
+        return jsonify({"ok": True})
+
+    @app.route("/api/library", methods=["POST"])
+    def api_library():
+        """Confirm species AND save this good crop into the reference library."""
+        import shutil
+
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            sid = int(data["id"])
+            species = str(data["species"])
+        except (KeyError, ValueError, TypeError):
+            return jsonify({"error": "bad id or species"}), 400
+
+        db = get_db()
+        db.set_verified(sid, species)
+
+        saved = None
+        rel = data.get("image_path")
+        if rel:
+            src = captures_dir / rel
+            if src.exists():
+                slug = species.lower().replace(" ", "-").replace("/", "-")
+                dest_dir = library_dir / slug
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                dest = dest_dir / src.name
+                shutil.copy2(src, dest)
+                saved = f"{slug}/{dest.name}"
+                db.add_library_example(species, saved, sid)
+
+        return jsonify({"ok": True, "saved": saved, "count": db.library_counts().get(species, 0)})
 
     return app
 

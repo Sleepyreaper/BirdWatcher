@@ -4,6 +4,7 @@ config.yaml
 # runtime data
 data/birdwatcher.db
 data/captures/
+data/library/
 data/*.log
 data/*.err
 *.db

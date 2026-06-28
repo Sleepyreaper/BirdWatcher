@@ -15,10 +15,16 @@
     .rcard .pick { margin: 14px 0; font-size: .85rem; color: var(--text-soft); }
     .rcard select { font-size: .95rem; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line);
       background: var(--surface); color: var(--text); width: 100%; max-width: 280px; margin-top: 6px; }
-    .acts { display: flex; gap: 10px; margin-top: 8px; }
-    .acts button { font-size: .9rem; padding: 9px 16px; border-radius: 9px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+    .acts { display: flex; gap: 9px; margin-top: 8px; flex-wrap: wrap; }
+    .acts button { font-size: .88rem; padding: 9px 14px; border-radius: 9px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+    .acts .good { background: #f5a623; color: #3a2600; border-color: #f5a623; font-weight: 600; }
+    .acts .good:hover { filter: brightness(1.06); }
     .acts .confirm { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
     .acts .confirm:hover { filter: brightness(1.08); }
+    .acts .bad { color: #b3261e; border-color: #e6b4ae; }
+    .acts .bad:hover { background: #fdeceb; }
+    .libcount { font-size: .76rem; color: var(--text-muted); margin-top: 10px; }
+    .libcount b { color: var(--accent); }
     .refbox { margin: 0; text-align: center; }
     .refbox .ref { width: 130px; height: 130px; object-fit: cover; border-radius: 10px; background: var(--surface-soft); }
     .refbox figcaption { font-size: .72rem; color: var(--text-muted); margin-top: 5px; }
@@ -40,7 +46,7 @@
   </header>
 
   <main class="rwrap">
-    <p class="lead">Confirm the species or pick the right one. We show the least-confident guesses first — your corrections become the training set that teaches the model your birds.</p>
+    <p class="lead">Pick the right species, then: <b>★ good photo</b> saves this crop to that bird's reference library (your few-shot training set), <b>✓ ID is right</b> just fixes the label, and <b>✕ bad image</b> makes the capture vanish from the dashboard. Least-confident guesses first.</p>
     <div id="cards"></div>
   </main>
 
@@ -50,8 +56,9 @@
     document.getElementById("theme").onclick = () =>
       applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
 
-    let SPECIES = [], refMap = {};
+    let SPECIES = [], refMap = {}, LIBCOUNTS = {};
     function options(sel) { return SPECIES.map((s) => `<option ${s.name === sel ? "selected" : ""}>${s.name}</option>`).join(""); }
+    function libLabel(sp) { const n = LIBCOUNTS[sp] || 0; return `📚 <b>${n}</b> reference image${n === 1 ? "" : "s"} saved for ${sp}`; }
 
     function card(v) {
       const c = document.createElement("div"); c.className = "rcard";
@@ -60,14 +67,24 @@
         `<img class="crop" src="/captures/${v.image_path}" alt="captured bird">` +
         `<div><div class="guess">model thinks <b>${guess}</b> · ${conf}%</div>` +
         `<div class="pick">actually:<br><select>${options(guess)}</select></div>` +
-        `<div class="acts"><button class="confirm">✓ confirm</button><button class="skip">skip</button></div></div>` +
+        `<div class="acts">` +
+          `<button class="good">★ good photo → library</button>` +
+          `<button class="confirm">✓ ID is right</button>` +
+          `<button class="bad">✕ bad image</button>` +
+          `<button class="skip">skip</button>` +
+        `</div>` +
+        `<div class="libcount">${libLabel(guess)}</div></div>` +
         `<figure class="refbox"><img class="ref" src="${refMap[guess] || ""}" alt="reference"><figcaption>reference</figcaption></figure>`;
-      const sel = c.querySelector("select"), ref = c.querySelector(".ref");
-      sel.onchange = () => (ref.src = refMap[sel.value] || "");
-      c.querySelector(".confirm").onclick = async () => {
-        await fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: v.id, species: sel.value }) });
+      const sel = c.querySelector("select"), ref = c.querySelector(".ref"), lib = c.querySelector(".libcount");
+      sel.onchange = () => { ref.src = refMap[sel.value] || ""; lib.innerHTML = libLabel(sel.value); };
+      const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      c.querySelector(".confirm").onclick = async () => { await post("/api/verify", { id: v.id, species: sel.value }); c.remove(); done(); };
+      c.querySelector(".good").onclick = async () => {
+        const r = await (await post("/api/library", { id: v.id, species: sel.value, image_path: v.image_path })).json();
+        if (r && typeof r.count === "number") LIBCOUNTS[sel.value] = r.count;
         c.remove(); done();
       };
+      c.querySelector(".bad").onclick = async () => { await post("/api/reject", { id: v.id }); c.remove(); done(); };
       c.querySelector(".skip").onclick = () => { c.remove(); done(); };
       return c;
     }
@@ -76,6 +93,7 @@
     async function load() {
       const d = await (await fetch("/api/unverified?limit=40")).json();
       SPECIES = d.species; SPECIES.forEach((s) => (refMap[s.name] = s.reference));
+      LIBCOUNTS = d.library || {};
       document.getElementById("progress").textContent = `${d.progress.verified} of ${d.progress.total} sightings verified`;
       const box = document.getElementById("cards"); box.innerHTML = "";
       if (!d.visits.length) { done(); return; }
