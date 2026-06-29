@@ -3,7 +3,7 @@ flask>=3.0
 pyyaml>=6.0
 
 # --- capture + detection (milestones M2-M3) ---
-opencv-python>=4.9
+opencv-python-headless>=4.9
 numpy>=1.26
 ultralytics>=8.1            # YOLO bird detector (auto-downloads yolov8n.pt)
 

@@ -1,0 +1,64 @@
+services:
+  go2rtc:
+    image: alexxit/go2rtc
+    restart: unless-stopped
+    volumes:
+      - /mnt/birddata/go2rtc.yaml:/config/go2rtc.yaml:ro
+    ports:
+      - "8554:8554"   # RTSP restream — LAN clients and future Frigate consumer
+      - "1984:1984"   # go2rtc web UI
+
+  birdwatcher:
+    build: .
+    image: birdwatcher:latest
+    restart: unless-stopped
+    runtime: nvidia
+    depends_on:
+      - go2rtc
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      # Loads config from the data volume so no secrets go in the image.
+      - BW_CONFIG=/data/config.yaml
+    ports:
+      - "8080:8080"
+    volumes:
+      - /mnt/birddata:/data
+    user: "1000:1000"   # sleepy
+
+  # ── BirdNET-Go (audio) ────────────────────────────────────────────────────
+  # Uncomment when a microphone is connected.
+  #
+  # birdnet-go:
+  #   image: ghcr.io/tphakala/birdnet-go:nightly
+  #   restart: unless-stopped
+  #   devices:
+  #     - /dev/snd:/dev/snd
+  #   group_add:
+  #     - audio
+  #   volumes:
+  #     - /mnt/birddata/birdnet-go:/data
+  #   ports:
+  #     - "8090:8080"
+
+  # ── Frigate (RTSP ingest + bird detection) ────────────────────────────────
+  # When Frigate arrives it replaces go2rtc above (Frigate embeds go2rtc).
+  # BirdWatcher will subscribe to Frigate's MQTT bird events instead of
+  # reading the stream directly.
+  #
+  # frigate:
+  #   image: ghcr.io/blakeblackshear/frigate:stable
+  #   restart: unless-stopped
+  #   privileged: true
+  #   runtime: nvidia
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #   volumes:
+  #     - /mnt/birddata/frigate:/media/frigate
+  #     - ./frigate.yml:/config/config.yml:ro
+  #     - /etc/localtime:/etc/localtime:ro
+  #   ports:
+  #     - "5000:5000"    # Frigate web UI
+  #     - "8971:8971"    # API
+  #     - "8554:8554"    # go2rtc RTSP restream out (remove standalone go2rtc above)
+  #     - "1984:1984"    # go2rtc web UI

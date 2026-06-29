@@ -19,6 +19,9 @@ go2rtc.yaml
 # local dev preview server config
 .claude/launch.json
 
+# container compose overrides (local port/volume tweaks)
+docker-compose.override.yml
+
 # downloaded reference images (regenerate via tools/fetch_reference_images.py)
 assets/reference/
 assets/_mock_*.txt

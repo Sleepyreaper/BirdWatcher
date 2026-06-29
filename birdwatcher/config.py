@@ -155,9 +155,9 @@ def _merge(dc: Any, data: dict[str, Any]) -> Any:
 
 
 def load_config(path: str | os.PathLike[str] | None = None) -> Config:
-    """Load config from YAML; missing file → defaults. Env override: RTSP_URL."""
+    """Load config from YAML; missing file → defaults. Env overrides: BW_CONFIG, RTSP_URL."""
     cfg = Config()
-    cfg_path = Path(path) if path else DEFAULT_CONFIG_PATH
+    cfg_path = Path(path) if path else Path(os.getenv("BW_CONFIG", str(DEFAULT_CONFIG_PATH)))
     if cfg_path.exists():
         if yaml is None:
             raise RuntimeError("PyYAML not installed but config.yaml exists; pip install pyyaml")
