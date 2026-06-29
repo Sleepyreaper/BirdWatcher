@@ -33,6 +33,26 @@ services:
       - /etc/localtime:/etc/localtime:ro
     user: "1000:1000"   # sleepy
 
+  birdwatcher-watch:
+    image: birdwatcher:latest   # reuses the image built by the birdwatcher service above
+    container_name: SleepyBirdsWatch
+    restart: unless-stopped
+    runtime: nvidia
+    depends_on:
+      - go2rtc
+      - birdwatcher          # ensures the image is built before this starts
+    command: ["python3", "run.py", "watch"]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      - TZ=America/New_York
+      - BW_CONFIG=/data/config.yaml
+    volumes:
+      - /mnt/birddata:/data
+      - /mnt/birddata/species_catalog.json:/app/data/species_catalog.json
+      - /etc/localtime:/etc/localtime:ro
+    user: "1000:1000"   # sleepy
+
   # ── BirdNET-Go (audio) ────────────────────────────────────────────────────
   birdnet-go:
     image: ghcr.io/tphakala/birdnet-go:nightly
