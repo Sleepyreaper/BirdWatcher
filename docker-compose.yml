@@ -11,6 +11,7 @@ services:
   birdwatcher:
     build: .
     image: birdwatcher:latest
+    container_name: SleepyBirds
     restart: unless-stopped
     runtime: nvidia
     depends_on:
