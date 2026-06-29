@@ -56,6 +56,16 @@ python run.py web      # http://127.0.0.1:8000
 | `python run.py seed`   | fake sightings to preview the UI |
 | `python run.py initdb` | create the SQLite DB |
 
+## Tests
+
+```bash
+pytest -q
+```
+
+Focused pytest coverage now exercises the highest-value backend seams: ingest
+validation, pipeline error handling, BirdNET-Go parsing failures, and weather
+cache/timeout behavior.
+
 ## Species ID backends
 
 Set `classifier.backend` in `config.yaml`:
@@ -94,6 +104,16 @@ efficient, location-aware, with its own UI on `:8080`. We don't replace it — w
 - a **"heard nearby"** section for catalog birds heard but not seen.
 
 The camera needs a **microphone** (go2rtc relays its audio track to BirdNET-Go).
+
+## Remote ingest notes
+
+For the existing `/api/ingest` bridge path, the dashboard now expects:
+- `Content-Type: application/json`
+- the existing ingest keys only (`token`, `species`, `confidence`, `detector_conf`, `first_ts`, `last_ts`, `frames`, `image_b64`)
+- bounded payload/image sizes
+- stable JSON error responses on invalid input
+
+This is still designed for a **trusted home LAN** — simple, local, and Pi-friendly.
 
 ## Deploy on a Raspberry Pi (the intended home)
 
