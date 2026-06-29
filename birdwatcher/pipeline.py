@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from .capture import RTSPCamera
-from .classifier import build_classifier
+from .classifier import StubClassifier, build_classifier
 from .config import Config
 from .database import Database
 from .detector import BirdDetector
@@ -59,7 +59,11 @@ class Pipeline:
         self.db = Database(cfg.paths.db_path())
         self.camera = RTSPCamera(cfg.camera, cfg.motion)
         self.detector = BirdDetector(cfg.detector)
-        self.classifier = build_classifier(cfg.classifier)
+        try:
+            self.classifier = build_classifier(cfg.classifier)
+        except Exception as e:
+            print(f"[pipeline] classifier init failed ({e}); falling back to stub")
+            self.classifier = StubClassifier()
         self.captures_dir = cfg.paths.captures_path()
         self.captures_dir.mkdir(parents=True, exist_ok=True)
         self._open: dict[int, _Visit] = {}
@@ -105,23 +109,31 @@ class Pipeline:
     def _record(self, v: _Visit) -> None:
         if v.frames < self.cfg.pipeline.min_visit_frames:
             return  # blip, not a real visit
-        result = self.classifier.classify(v.best_crop)
+        try:
+            result = self.classifier.classify(v.best_crop)
+        except Exception as e:
+            print(f"[pipeline] classify failed: {e}")
+            return
         species = result.species
         if result.confidence < self.cfg.classifier.min_confidence:
             species = "Unknown bird"
-        if self.cfg.pipeline.ingest_url:
-            self._post_visit(v, species, result.confidence)
-        else:
-            rel = self._save_crop(v.best_crop, species, v.first_seen)
-            self.db.add_visit(
-                species=species,
-                confidence=result.confidence,
-                image_path=rel,
-                detector_conf=v.best_det_conf,
-                first_ts=v.first_seen,
-                last_ts=v.last_seen,
-                frames=v.frames,
-            )
+        try:
+            if self.cfg.pipeline.ingest_url:
+                self._post_visit(v, species, result.confidence)
+            else:
+                rel = self._save_crop(v.best_crop, species, v.first_seen)
+                self.db.add_visit(
+                    species=species,
+                    confidence=result.confidence,
+                    image_path=rel,
+                    detector_conf=v.best_det_conf,
+                    first_ts=v.first_seen,
+                    last_ts=v.last_seen,
+                    frames=v.frames,
+                )
+        except Exception as e:
+            print(f"[pipeline] record failed: {e}")
+            return
         dur = (v.last_seen - v.first_seen).total_seconds()
         print(f"[pipeline] {v.first_seen:%H:%M:%S}  visit: {species}  "
               f"frames={v.frames} dur={dur:.0f}s id={result.confidence:.2f}")
@@ -135,7 +147,10 @@ class Pipeline:
         day_dir.mkdir(parents=True, exist_ok=True)
         slug = species.lower().replace(" ", "-").replace("/", "-")
         out = day_dir / f"{slug}_{ts.strftime('%H%M%S')}.jpg"
-        cv2.imwrite(str(out), crop)
+        if crop is None or getattr(crop, "size", 0) == 0:
+            return None
+        if not cv2.imwrite(str(out), crop):
+            raise RuntimeError(f"failed to write crop: {out}")
         return str(out.relative_to(self.captures_dir)).replace("\\", "/")
 
     def _post_visit(self, v: _Visit, species: str, conf: float) -> None:
@@ -162,7 +177,8 @@ class Pipeline:
             headers={"Content-Type": "application/json"},
         )
         try:
-            urllib.request.urlopen(req, timeout=10).read()
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                resp.read()
         except Exception as e:
             print(f"[pipeline] ingest POST failed: {e}")
 
@@ -175,7 +191,10 @@ class Pipeline:
                 if frame is None:
                     self._reap(datetime.now())  # idle heartbeat
                 else:
-                    self.process_frame(frame)
+                    try:
+                        self.process_frame(frame)
+                    except Exception as e:
+                        print(f"[pipeline] frame processing failed: {e}")
         except KeyboardInterrupt:
             print("\n[pipeline] stopping…")
         finally:
