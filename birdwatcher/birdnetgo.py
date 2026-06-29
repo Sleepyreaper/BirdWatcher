@@ -77,6 +77,43 @@ class BirdnetGoReader:
                 out.setdefault(common, [0] * 7)[day] += 1
         return out
 
+    def heard_week_all(self, week_start: date) -> dict[str, list[int]]:
+        """Like heard_week but UNFILTERED — every species heard, keyed by
+        scientific name (no catalog mapping). The caller resolves display names.
+        """
+        if not self.available():
+            return {}
+        start = datetime.combine(week_start, time.min)
+        end = start + timedelta(days=7)
+        try:
+            con = self._connect()
+            if con is None:
+                return {}
+            try:
+                rows = con.execute(
+                    "SELECT d.detected_at, l.scientific_name FROM detections d "
+                    "JOIN labels l ON l.id = d.label_id "
+                    "WHERE d.detected_at >= ? AND d.detected_at < ? "
+                    "AND COALESCE(d.unlikely, 0) = 0",
+                    (int(start.timestamp()), int(end.timestamp())),
+                ).fetchall()
+            finally:
+                con.close()
+        except Exception:
+            return {}
+
+        out: dict[str, list[int]] = {}
+        for epoch, sci in rows:
+            if not isinstance(sci, str):
+                continue
+            dt = self._safe_dt(epoch)
+            if dt is None:
+                continue
+            day = (dt.date() - week_start).days
+            if 0 <= day < 7:
+                out.setdefault(sci, [0] * 7)[day] += 1
+        return out
+
     def recent(self, sci_to_common: dict[str, str], limit: int = 14) -> list[dict]:
         """Most recent heard detections (newest first), mapped to our catalog."""
         if not self.available():

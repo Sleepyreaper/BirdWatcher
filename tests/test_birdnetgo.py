@@ -31,6 +31,23 @@ def test_birdnetgo_heard_week_skips_bad_rows(tmp_path: Path):
     assert out["Northern Cardinal"][1] == 1
 
 
+def test_birdnetgo_heard_week_all_is_unfiltered(tmp_path: Path):
+    db = tmp_path / "birdnet.db"
+    con = _make_db(db)
+    con.execute("INSERT INTO labels (id, scientific_name) VALUES (2, 'Buteo lineatus')")
+    ts = int(datetime(2026, 6, 29, 8, 0).timestamp())
+    con.execute("INSERT INTO detections VALUES (?, ?, ?, 0)", (ts, 0.9, 1))  # catalog bird
+    con.execute("INSERT INTO detections VALUES (?, ?, ?, 0)", (ts, 0.8, 2))  # off-list hawk
+    con.commit()
+    con.close()
+
+    r = BirdnetGoReader(db)
+    out = r.heard_week_all(date(2026, 6, 28))
+    # Keyed by scientific name, and the off-catalog hawk is NOT dropped.
+    assert out["Cardinalis cardinalis"][1] == 1
+    assert out["Buteo lineatus"][1] == 1
+
+
 def test_birdnetgo_recent_returns_empty_on_query_failure(tmp_path: Path):
     db = tmp_path / "birdnet.db"
     db.write_text("not sqlite", encoding="utf-8")

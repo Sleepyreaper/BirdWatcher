@@ -47,6 +47,19 @@ def _load_catalog() -> tuple[dict, dict]:
     return data.get("region", {}), by_name
 
 
+def _load_birdnet_labels() -> dict[str, str]:
+    """Scientific -> common for off-catalog species BirdNET-Go hears (its DB
+    stores only Latin names). Missing entries fall back to the scientific name."""
+    path = PROJECT_ROOT / "data" / "birdnet_labels.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {k: v for k, v in data.items() if not k.startswith("_")}
+
+
 def _json_error(code: str, status: int = 400):
     return jsonify({"ok": False, "error": code}), status
 
@@ -159,7 +172,30 @@ def create_app(cfg: Config | None = None) -> Flask:
         for name, sp in catalog.items()
         if sp.get("scientific_name")
     }
+    birdnet_labels = _load_birdnet_labels()
     birdnet = BirdnetGoReader(cfg.audio.birdnet_db)
+
+    def _heard_display(sci: str) -> dict:
+        """Resolve a scientific name to display fields. Catalog species get
+        their common name + reference photo; off-list species fall back to the
+        BirdNET label map, then to the raw scientific name."""
+        common = sci_to_common.get(sci)
+        if common:
+            meta = catalog.get(common, {})
+            return {
+                "name": common,
+                "scientific": meta.get("scientific_name") or sci,
+                "family": meta.get("family"),
+                "reference": _ref_url(meta.get("reference_image")),
+                "off_list": False,
+            }
+        return {
+            "name": birdnet_labels.get(sci, sci),
+            "scientific": sci,
+            "family": None,
+            "reference": None,
+            "off_list": True,
+        }
 
     def get_db() -> Database:
         if not hasattr(app, "_bw_db"):
@@ -179,10 +215,22 @@ def create_app(cfg: Config | None = None) -> Flask:
         start_param = request.args.get("start")
         week_start = date.fromisoformat(start_param) if start_param else week_start_for(date.today())
         grid = get_db().week_grid(week_start)
+        # Every species heard this week, keyed by scientific name (unfiltered),
+        # so the dashboard mirrors BirdNET-Go instead of only the 32 catalog birds.
         try:
-            heard = birdnet.heard_week(week_start, sci_to_common)
+            heard_all = birdnet.heard_week_all(week_start)
         except Exception:
-            heard = {}
+            heard_all = {}
+
+        # Catalog-name overlay {common: [7]} for the 🔊 marks on seen rows and
+        # the "heard" flag in the catalog list — derived from the same query.
+        heard = {}
+        for sci, counts in heard_all.items():
+            common = sci_to_common.get(sci)
+            if not common:
+                continue
+            prev = heard.get(common)
+            heard[common] = [a + b for a, b in zip(prev, counts)] if prev else list(counts)
 
         seen, seen_names = [], set()
         per_day = [0] * 7
@@ -199,18 +247,14 @@ def create_app(cfg: Config | None = None) -> Flask:
             for i, c in enumerate(sp["counts"]):
                 per_day[i] += c
 
+        # Heard-but-not-seen — now includes off-catalog species (hawks, swifts,
+        # warblers, even the odd katydid) with a resolved display name.
         heard_only = []
-        for name, counts in heard.items():
-            if name in seen_names:
+        for sci, counts in heard_all.items():
+            disp = _heard_display(sci)
+            if not disp["off_list"] and disp["name"] in seen_names:
                 continue
-            meta = catalog.get(name, {})
-            heard_only.append({
-                "name": name,
-                "scientific": meta.get("scientific_name"),
-                "family": meta.get("family"),
-                "reference": _ref_url(meta.get("reference_image")),
-                "heard": counts,
-            })
+            heard_only.append({**disp, "heard": counts})
         heard_only.sort(key=lambda s: sum(s["heard"]), reverse=True)
 
         catalog_list = [{
@@ -238,7 +282,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             "stats": {
                 "visits": total,
                 "species_seen": len(seen),
-                "species_heard": len(heard),
+                "species_heard": len(heard_all),
                 "on_list": len(catalog_list),
                 "busiest_day": DAYS[per_day.index(max(per_day))] if total else "—",
             },
