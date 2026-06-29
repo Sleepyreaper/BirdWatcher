@@ -70,9 +70,15 @@ def test_record_save_failure_does_not_raise(pipe, monkeypatch):
 
 
 def test_post_visit_network_failure_is_swallowed(pipe, monkeypatch):
+    import numpy as np
+
+    # Real crop so cv2.imencode succeeds and we actually exercise the network
+    # path this test is about (a sentinel object would fail before urlopen).
+    ts = datetime(2026, 6, 29, 8, 0, 0)
+    visit = _Visit((0, 0, 10, 10), ts, ts, 3, 1.0, np.zeros((10, 10, 3), dtype=np.uint8), 0.8)
     pipe.cfg.pipeline.ingest_url = "http://example.test/api/ingest"
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError("nope")))
-    pipe._post_visit(_visit(), "Northern Cardinal", 0.9)
+    pipe._post_visit(visit, "Northern Cardinal", 0.9)
 
 
 def test_classifier_init_falls_back_to_stub(monkeypatch, tmp_path):

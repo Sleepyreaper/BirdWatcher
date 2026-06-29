@@ -7,6 +7,7 @@ not one detection. The pipeline collapses frames into a visit and writes the bes
 from __future__ import annotations
 
 import sqlite3
+import threading
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -46,6 +47,14 @@ class Database:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # WAL lets a separate writer (the watch container) and readers (the web
+        # container) hit the same DB file without "database is locked" errors;
+        # busy_timeout makes any remaining contention wait briefly instead of
+        # failing. The RLock guards the single shared connection across Flask's
+        # threaded server (multi-statement writes stay atomic).
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        self._lock = threading.RLock()
         self._conn.executescript(SCHEMA)
         self._migrate()
         self._conn.commit()
@@ -72,21 +81,22 @@ class Database:
     ) -> int:
         first_ts = first_ts or datetime.now()
         last_ts = last_ts or first_ts
-        cur = self._conn.execute(
-            "INSERT INTO sightings (ts, species, confidence, image_path, detector_conf,"
-            " last_ts, frames) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                first_ts.isoformat(timespec="seconds"),
-                species,
-                confidence,
-                image_path,
-                detector_conf,
-                last_ts.isoformat(timespec="seconds"),
-                frames,
-            ),
-        )
-        self._conn.commit()
-        return int(cur.lastrowid)
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO sightings (ts, species, confidence, image_path, detector_conf,"
+                " last_ts, frames) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    first_ts.isoformat(timespec="seconds"),
+                    species,
+                    confidence,
+                    image_path,
+                    detector_conf,
+                    last_ts.isoformat(timespec="seconds"),
+                    frames,
+                ),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
 
     # --- human-in-the-loop verification ----------------------------------
     def list_unverified(self, limit: int = 40) -> list[dict]:
@@ -101,11 +111,12 @@ class Database:
         return [dict(r) for r in rows]
 
     def set_verified(self, sighting_id: int, species: str) -> None:
-        self._conn.execute(
-            "UPDATE sightings SET verified_species = ? WHERE id = ?",
-            (species, int(sighting_id)),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE sightings SET verified_species = ? WHERE id = ?",
+                (species, int(sighting_id)),
+            )
+            self._conn.commit()
 
     def review_counts(self) -> tuple[int, int]:
         """(verified, total) sightings — for a progress readout."""
@@ -120,21 +131,23 @@ class Database:
 
     def reject(self, sighting_id: int) -> None:
         """Hide a bad capture everywhere (kept in the DB, just flagged)."""
-        self._conn.execute(
-            "UPDATE sightings SET rejected = 1 WHERE id = ?", (int(sighting_id),)
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE sightings SET rejected = 1 WHERE id = ?", (int(sighting_id),)
+            )
+            self._conn.commit()
 
     # --- few-shot reference library (verified good crops) -----------------
     def add_library_example(self, species: str, image_path: str,
                             sighting_id: int | None = None) -> None:
         """Record a confirmed good crop as a reference example for `species`."""
-        self._conn.execute(
-            "INSERT INTO library_examples (species, image_path, sighting_id, added_at) "
-            "VALUES (?, ?, ?, ?)",
-            (species, image_path, sighting_id, datetime.now().isoformat(timespec="seconds")),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO library_examples (species, image_path, sighting_id, added_at) "
+                "VALUES (?, ?, ?, ?)",
+                (species, image_path, sighting_id, datetime.now().isoformat(timespec="seconds")),
+            )
+            self._conn.commit()
 
     def library_counts(self) -> dict[str, int]:
         """{species: number of saved reference crops}."""
