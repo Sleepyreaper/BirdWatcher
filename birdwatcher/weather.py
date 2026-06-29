@@ -43,8 +43,37 @@ def _icon(code: int | None) -> tuple[str, str]:
 _cache: dict[tuple, tuple[float, list]] = {}
 
 
+def _normalize_hourly(data: dict) -> list[dict]:
+    hourly = data.get("hourly") or {}
+    times = hourly.get("time") or []
+    temps = hourly.get("temperature_2m") or []
+    codes = hourly.get("weather_code") or []
+    out: list[dict] = []
+    for i, t in enumerate(times):
+        if not isinstance(t, str) or len(t) < 13:
+            continue
+        try:
+            hour = int(t[11:13])
+        except ValueError:
+            continue
+        code = codes[i] if i < len(codes) else None
+        emoji, label = _icon(code)
+        out.append({
+            "hour": hour,
+            "temp": temps[i] if i < len(temps) else None,
+            "code": code,
+            "icon": emoji,
+            "label": label,
+        })
+    return out
+
+
 def hourly_weather(day: date, lat: float, lon: float, ttl: float = 1800.0) -> list[dict]:
-    """Return [{hour, temp, code, icon, label}] (24 rows) for `day`, or []."""
+    """Return [{hour, temp, code, icon, label}] (24 rows) for `day`, or [].
+
+    If a cached value exists but is stale, we attempt a refresh; on refresh failure,
+    the stale cached value is returned rather than dropping the weather row entirely.
+    """
     key = (day.isoformat(), round(lat, 3), round(lon, 3))
     now = _time.time()
     hit = _cache.get(key)
@@ -58,26 +87,14 @@ def hourly_weather(day: date, lat: float, lon: float, ttl: float = 1800.0) -> li
         f"&start_date={day.isoformat()}&end_date={day.isoformat()}"
         "&temperature_unit=fahrenheit&timezone=auto"
     )
-    out: list[dict] = []
     try:
         with urllib.request.urlopen(url, timeout=4) as resp:
             data = json.load(resp)
-        h = data.get("hourly", {})
-        times = h.get("time", [])
-        temps = h.get("temperature_2m", [])
-        codes = h.get("weather_code", [])
-        for i, t in enumerate(times):
-            code = codes[i] if i < len(codes) else None
-            emoji, label = _icon(code)
-            out.append({
-                "hour": int(t[11:13]),
-                "temp": temps[i] if i < len(temps) else None,
-                "code": code,
-                "icon": emoji,
-                "label": label,
-            })
+        out = _normalize_hourly(data)
+        _cache[key] = (now, out)
+        return out
     except Exception:
-        out = []
-
-    _cache[key] = (now, out)
-    return out
+        if hit:
+            return hit[1]
+        _cache[key] = (now, [])
+        return []
