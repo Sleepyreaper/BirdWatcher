@@ -22,7 +22,19 @@ class BirdnetGoReader:
         self.db_path = Path(db_path) if db_path else None
 
     def available(self) -> bool:
-        return bool(self.db_path) and self.db_path.exists()
+        return bool(self.db_path) and self.db_path.exists() and self.db_path.is_file()
+
+    def _connect(self):
+        if not self.available():
+            return None
+        return sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True, timeout=2)
+
+    @staticmethod
+    def _safe_dt(epoch) -> datetime | None:
+        try:
+            return datetime.fromtimestamp(int(epoch))
+        except (TypeError, ValueError, OSError, OverflowError):
+            return None
 
     def heard_week(self, week_start: date, sci_to_common: dict[str, str]) -> dict[str, list[int]]:
         """Return {catalog common_name: [7 daily heard-counts]} for the week.
@@ -34,24 +46,33 @@ class BirdnetGoReader:
         start = datetime.combine(week_start, time.min)
         end = start + timedelta(days=7)
         try:
-            con = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True, timeout=2)
-            rows = con.execute(
-                "SELECT d.detected_at, l.scientific_name FROM detections d "
-                "JOIN labels l ON l.id = d.label_id "
-                "WHERE d.detected_at >= ? AND d.detected_at < ? "
-                "AND COALESCE(d.unlikely, 0) = 0",
-                (int(start.timestamp()), int(end.timestamp())),
-            ).fetchall()
-            con.close()
+            con = self._connect()
+            if con is None:
+                return {}
+            try:
+                rows = con.execute(
+                    "SELECT d.detected_at, l.scientific_name FROM detections d "
+                    "JOIN labels l ON l.id = d.label_id "
+                    "WHERE d.detected_at >= ? AND d.detected_at < ? "
+                    "AND COALESCE(d.unlikely, 0) = 0",
+                    (int(start.timestamp()), int(end.timestamp())),
+                ).fetchall()
+            finally:
+                con.close()
         except Exception:
             return {}
 
         out: dict[str, list[int]] = {}
         for epoch, sci in rows:
+            if not isinstance(sci, str):
+                continue
             common = sci_to_common.get(sci)
             if not common:
                 continue
-            day = (datetime.fromtimestamp(epoch).date() - week_start).days
+            dt = self._safe_dt(epoch)
+            if dt is None:
+                continue
+            day = (dt.date() - week_start).days
             if 0 <= day < 7:
                 out.setdefault(common, [0] * 7)[day] += 1
         return out
@@ -61,28 +82,41 @@ class BirdnetGoReader:
         if not self.available():
             return []
         try:
-            con = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True, timeout=2)
-            rows = con.execute(
-                "SELECT d.detected_at, d.confidence, l.scientific_name FROM detections d "
-                "JOIN labels l ON l.id = d.label_id "
-                "WHERE COALESCE(d.unlikely, 0) = 0 "
-                "ORDER BY d.detected_at DESC LIMIT ?",
-                (limit * 5,),  # over-fetch: most won't map to our 32-species catalog
-            ).fetchall()
-            con.close()
+            con = self._connect()
+            if con is None:
+                return []
+            try:
+                rows = con.execute(
+                    "SELECT d.detected_at, d.confidence, l.scientific_name FROM detections d "
+                    "JOIN labels l ON l.id = d.label_id "
+                    "WHERE COALESCE(d.unlikely, 0) = 0 "
+                    "ORDER BY d.detected_at DESC LIMIT ?",
+                    (max(1, limit) * 5,),
+                ).fetchall()
+            finally:
+                con.close()
         except Exception:
             return []
 
         out: list[dict] = []
         for epoch, conf, sci in rows:
+            if not isinstance(sci, str):
+                continue
             common = sci_to_common.get(sci)
             if not common:
                 continue
+            dt = self._safe_dt(epoch)
+            if dt is None:
+                continue
+            try:
+                conf_f = float(conf or 0)
+            except (TypeError, ValueError):
+                conf_f = 0.0
             out.append({
                 "name": common,
                 "scientific": sci,
-                "confidence": float(conf or 0),
-                "ts": datetime.fromtimestamp(epoch).isoformat(timespec="seconds"),
+                "confidence": conf_f,
+                "ts": dt.isoformat(timespec="seconds"),
             })
             if len(out) >= limit:
                 break
