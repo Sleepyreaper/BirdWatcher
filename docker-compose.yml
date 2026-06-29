@@ -32,19 +32,20 @@ services:
     user: "1000:1000"   # sleepy
 
   # ── BirdNET-Go (audio) ────────────────────────────────────────────────────
-  # Uncomment when a microphone is connected.
-  #
-  # birdnet-go:
-  #   image: ghcr.io/tphakala/birdnet-go:nightly
-  #   restart: unless-stopped
-  #   devices:
-  #     - /dev/snd:/dev/snd
-  #   group_add:
-  #     - audio
-  #   volumes:
-  #     - /mnt/birddata/birdnet-go:/data
-  #   ports:
-  #     - "8090:8080"
+  birdnet-go:
+    image: ghcr.io/tphakala/birdnet-go:nightly
+    container_name: BirdNETGo
+    restart: unless-stopped
+    volumes:
+      - /mnt/birddata/birdnet-go-app/config:/config
+      - /mnt/birddata/birdnet-go-app/data:/data
+    ports:
+      - "8090:8080"   # BirdNET-Go dashboard
+    # Add these when a microphone is connected:
+    # devices:
+    #   - /dev/snd:/dev/snd
+    # group_add:
+    #   - audio
 
   # ── Frigate (RTSP ingest + bird detection) ────────────────────────────────
   # When Frigate arrives it replaces go2rtc above (Frigate embeds go2rtc).
