@@ -25,6 +25,10 @@ services:
       - "8080:8080"
     volumes:
       - /mnt/birddata:/data
+      # Catalog and reference images live on the data drive so the fetch script's
+      # downloads and path updates survive container restarts.
+      - /mnt/birddata/species_catalog.json:/app/data/species_catalog.json
+      - /mnt/birddata/assets/reference:/app/assets/reference
     user: "1000:1000"   # sleepy
 
   # ── BirdNET-Go (audio) ────────────────────────────────────────────────────
