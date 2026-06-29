@@ -19,16 +19,16 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      - TZ=America/New_York
       # Loads config from the data volume so no secrets go in the image.
       - BW_CONFIG=/data/config.yaml
     ports:
       - "8080:8080"
     volumes:
       - /mnt/birddata:/data
-      # Catalog and reference images live on the data drive so the fetch script's
-      # downloads and path updates survive container restarts.
       - /mnt/birddata/species_catalog.json:/app/data/species_catalog.json
       - /mnt/birddata/assets/reference:/app/assets/reference
+      - /etc/localtime:/etc/localtime:ro
     user: "1000:1000"   # sleepy
 
   # ── BirdNET-Go (audio) ────────────────────────────────────────────────────
@@ -36,9 +36,12 @@ services:
     image: ghcr.io/tphakala/birdnet-go:nightly
     container_name: BirdNETGo
     restart: unless-stopped
+    environment:
+      - TZ=America/New_York
     volumes:
       - /mnt/birddata/birdnet-go-app/config:/config
       - /mnt/birddata/birdnet-go-app/data:/data
+      - /etc/localtime:/etc/localtime:ro
     ports:
       - "8090:8080"   # BirdNET-Go dashboard
     # Add these when a microphone is connected:
@@ -59,6 +62,7 @@ services:
   #   runtime: nvidia
   #   environment:
   #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - TZ=America/New_York
   #   volumes:
   #     - /mnt/birddata/frigate:/media/frigate
   #     - ./frigate.yml:/config/config.yml:ro

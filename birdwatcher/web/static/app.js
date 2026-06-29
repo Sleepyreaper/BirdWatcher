@@ -266,13 +266,11 @@ async function loadRecent() {
   const wrap = document.getElementById("recent");
   const card = document.getElementById("lv-card");
   const items = d.items || [];
-  const it = items.find((x) => x.kind === "seen") || items[0];
+  const it = items.find((x) => x.kind === "seen");
   if (!it) { wrap.hidden = true; return; }
-  const tag = it.kind === "heard"
-    ? `<span class="heard">🔊 heard</span>`
-    : (it.confidence ? `${Math.round(it.confidence * 100)}% match` : "");
+  const tag = it.confidence ? `${Math.round(it.confidence * 100)}% match` : "";
   card.innerHTML =
-    `${recentPhoto(it)}<div class="lv-meta"><div class="lv-label">last visited</div>` +
+    `${recentPhoto(it)}<div class="lv-meta"><div class="lv-label">last seen at feeder</div>` +
     `<div class="lv-name">${it.name}</div><div class="lv-sub">${ago(it.ts)}${tag ? " · " + tag : ""}</div></div>`;
   card.onclick = () => openShot(it);
   wrap.hidden = false;
@@ -280,7 +278,7 @@ async function loadRecent() {
 
 // theme
 function applyTheme(t) { document.documentElement.setAttribute("data-theme", t); localStorage.setItem("bw-theme", t); }
-applyTheme(localStorage.getItem("bw-theme") || "light");
+applyTheme(localStorage.getItem("bw-theme") || "dark");
 document.getElementById("theme").onclick = () =>
   applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
 
