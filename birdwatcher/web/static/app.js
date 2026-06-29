@@ -71,7 +71,7 @@ function render(d) {
   d.seen.forEach((sp) => g.append(seenRow(sp, d, today)));
 
   if (d.heard_only.length) {
-    g.append(el("div", "divider", `<span class="sound">🔊</span> heard nearby · not seen at the feeder`));
+    g.append(el("div", "divider", `<span class="sound">🔊</span> heard nearby · numbers are times heard per day`));
     d.heard_only.forEach((sp) => g.append(heardRow(sp, d, today)));
   }
   const expected = d.catalog.filter((c) => !c.seen && !c.heard);
@@ -105,10 +105,11 @@ function seenRow(sp, d, today) {
 
 function heardRow(sp, d, today) {
   const row = el("div", "row srow");
-  row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub" style="color:var(--accent)">heard${sp.scientific ? ` · ${sp.scientific}` : ""}</div></div>`));
+  const tag = sp.also_seen ? " · also seen 👁" : "";
+  row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub" style="color:var(--accent)">heard${sp.scientific ? ` · ${sp.scientific}` : ""}${tag}</div></div>`));
   sp.heard.forEach((h, i) => {
     const cell = cellFor(h, d.days[i] === today, false, heatT, `${currentStart}|H|${sp.name}|${i}`);
-    if (h) cell.title = `${sp.name} — ${d.days[i]}\nheard ${h}× 🔊 (not seen at the feeder)`;
+    if (h) cell.title = `${sp.name} — ${d.days[i]}\nheard ${h}×` + (sp.also_seen ? " · also seen at the feeder" : "");
     row.append(cell);
   });
   return row;
@@ -187,16 +188,27 @@ function renderDay(d) {
     g.append(wrow);
   }
 
-  const head = el("div", "row head");
-  head.append(el("div", "species", `<span class="hlabel">Species</span>`));
-  d.hours.forEach((h) => head.append(el("div", "daycol" + (h === nowH ? " today" : ""), h % 3 === 0 ? hourLabel(h) : "")));
-  g.append(head);
+  const mkHead = (label) => {
+    const head = el("div", "row head");
+    head.append(el("div", "species", `<span class="hlabel">${label}</span>`));
+    d.hours.forEach((h) => head.append(el("div", "daycol" + (h === nowH ? " today" : ""), h % 3 === 0 ? hourLabel(h) : "")));
+    return head;
+  };
 
-  const emptyEl = document.getElementById("empty");
-  emptyEl.textContent = "No visits recorded for this day.";
-  emptyEl.hidden = d.species.length > 0;
-  d.species.forEach((sp) => g.append(hourRow(sp, nowH)));
+  const seenSp = d.species || [], heardSp = d.heard || [];
 
+  // Seen at the feeder, by hour (top grid)
+  g.append(mkHead("👁 Seen"));
+  if (seenSp.length) seenSp.forEach((sp) => g.append(hourRow(sp, nowH)));
+  else g.append(el("div", "daynote", "nothing seen at the feeder this day"));
+
+  // Heard nearby, by hour (bottom grid)
+  if (heardSp.length) {
+    g.append(mkHead("🔊 Heard"));
+    heardSp.forEach((sp) => g.append(heardHourRow(sp, nowH)));
+  }
+
+  document.getElementById("empty").hidden = true;   // per-section notes instead
   document.getElementById("nowcard").hidden = true;
 }
 
@@ -208,6 +220,19 @@ function hourRow(sp, nowH) {
     const cell = el("div", "cell" + (c ? " has" : "") + (h === nowH ? " today" : ""));
     const col = heat(c);
     if (col) { cell.style.background = col[0]; cell.style.color = col[1]; cell.textContent = c; cell.title = `${sp.name} · ${hourLabel(h)} · ${c} visit(s)`; }
+    row.append(cell);
+  });
+  return row;
+}
+
+function heardHourRow(sp, nowH) {
+  const row = el("div", "row srow");
+  const sub = `heard ${sp.total}×` + (sp.scientific ? ` · ${sp.scientific}` : "");
+  row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub" style="color:var(--accent)">${sub}</div></div>`));
+  sp.counts.forEach((c, h) => {
+    const cell = el("div", "cell" + (c ? " has" : "") + (h === nowH ? " today" : ""));
+    const col = heatT(c);
+    if (col) { cell.style.background = col[0]; cell.style.color = col[1]; cell.textContent = c; cell.title = `${sp.name} · ${hourLabel(h)} · heard ${c}×`; }
     row.append(cell);
   });
   return row;

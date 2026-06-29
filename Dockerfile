@@ -7,9 +7,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 python3.11-dev python3-pip \
     ffmpeg libglib2.0-0 \
+    tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3.11 /usr/bin/python3 \
     && ln -sf /usr/bin/pip3 /usr/bin/pip
+
+# The CUDA base image ships no tzdata, so without this Python can't resolve the
+# TZ name and falls back to UTC — which buckets detections onto the wrong day.
+ENV TZ=America/New_York
 
 WORKDIR /app
 

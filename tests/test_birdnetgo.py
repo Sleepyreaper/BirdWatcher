@@ -48,6 +48,21 @@ def test_birdnetgo_heard_week_all_is_unfiltered(tmp_path: Path):
     assert out["Buteo lineatus"][1] == 1
 
 
+def test_birdnetgo_heard_day_hours_buckets_by_hour(tmp_path: Path):
+    db = tmp_path / "birdnet.db"
+    con = _make_db(db)
+    con.execute("INSERT INTO detections VALUES (?, ?, ?, 0)", (int(datetime(2026, 6, 29, 8, 15).timestamp()), 0.9, 1))
+    con.execute("INSERT INTO detections VALUES (?, ?, ?, 0)", (int(datetime(2026, 6, 29, 8, 45).timestamp()), 0.9, 1))
+    con.execute("INSERT INTO detections VALUES (?, ?, ?, 0)", (int(datetime(2026, 6, 29, 17, 5).timestamp()), 0.9, 1))
+    con.commit()
+    con.close()
+
+    r = BirdnetGoReader(db)
+    out = r.heard_day_hours(date(2026, 6, 29))
+    counts = out["Cardinalis cardinalis"]
+    assert counts[8] == 2 and counts[17] == 1 and sum(counts) == 3
+
+
 def test_birdnetgo_recent_returns_empty_on_query_failure(tmp_path: Path):
     db = tmp_path / "birdnet.db"
     db.write_text("not sqlite", encoding="utf-8")

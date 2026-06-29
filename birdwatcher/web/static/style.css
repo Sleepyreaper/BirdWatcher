@@ -121,6 +121,7 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .nowcard b { color: var(--text); font-weight: 600; }
 
 .empty { color: var(--text-muted); padding: 48px; text-align: center; font-size: .9rem; }
+.daynote { color: var(--text-muted); font-size: .76rem; padding: 8px 4px 4px; }
 
 /* lightbox */
 .lightbox[hidden] { display: none; }

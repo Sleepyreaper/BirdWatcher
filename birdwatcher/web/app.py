@@ -247,14 +247,18 @@ def create_app(cfg: Config | None = None) -> Flask:
             for i, c in enumerate(sp["counts"]):
                 per_day[i] += c
 
-        # Heard-but-not-seen — now includes off-catalog species (hawks, swifts,
-        # warblers, even the odd katydid) with a resolved display name.
+        # Every species heard this week, with daily counts — including birds also
+        # seen at the feeder (e.g. the Carolina Wren), which the seen grid only
+        # marks with a 🔊 and never showed a heard count for. `also_seen` lets the
+        # UI flag the overlap.
         heard_only = []
         for sci, counts in heard_all.items():
             disp = _heard_display(sci)
-            if not disp["off_list"] and disp["name"] in seen_names:
-                continue
-            heard_only.append({**disp, "heard": counts})
+            heard_only.append({
+                **disp,
+                "heard": counts,
+                "also_seen": (not disp["off_list"]) and disp["name"] in seen_names,
+            })
         heard_only.sort(key=lambda s: sum(s["heard"]), reverse=True)
 
         catalog_list = [{
@@ -306,6 +310,17 @@ def create_app(cfg: Config | None = None) -> Flask:
             for h, c in enumerate(sp["counts"]):
                 per_hour[h] += c
 
+        # Heard-by-hour (acoustic) — the bottom grid, mirroring BirdNET-Go.
+        try:
+            heard_raw = birdnet.heard_day_hours(day)
+        except Exception:
+            heard_raw = {}
+        heard = []
+        for sci, counts in heard_raw.items():
+            disp = _heard_display(sci)
+            heard.append({**disp, "total": sum(counts), "counts": counts})
+        heard.sort(key=lambda s: s["total"], reverse=True)
+
         wx = []
         if cfg.weather.enabled:
             try:
@@ -319,12 +334,14 @@ def create_app(cfg: Config | None = None) -> Flask:
             "date": day.isoformat(),
             "hours": grid["hours"],
             "species": species,
+            "heard": heard,
             "weather": wx,
             "region": region,
             "is_today": day == date.today(),
             "stats": {
                 "visits": total,
                 "species_seen": len(species),
+                "species_heard": len(heard),
                 "busiest_hour": (f"{busiest % 12 or 12}{'am' if busiest < 12 else 'pm'}" if busiest is not None else "—"),
             },
         })

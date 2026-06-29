@@ -36,6 +36,27 @@ class BirdnetGoReader:
         except (TypeError, ValueError, OSError, OverflowError):
             return None
 
+    def _detections_between(self, start: datetime, end: datetime) -> list[tuple]:
+        """Raw (epoch, scientific_name) rows in [start, end). [] on any error."""
+        if not self.available():
+            return []
+        try:
+            con = self._connect()
+            if con is None:
+                return []
+            try:
+                return con.execute(
+                    "SELECT d.detected_at, l.scientific_name FROM detections d "
+                    "JOIN labels l ON l.id = d.label_id "
+                    "WHERE d.detected_at >= ? AND d.detected_at < ? "
+                    "AND COALESCE(d.unlikely, 0) = 0",
+                    (int(start.timestamp()), int(end.timestamp())),
+                ).fetchall()
+            finally:
+                con.close()
+        except Exception:
+            return []
+
     def heard_week(self, week_start: date, sci_to_common: dict[str, str]) -> dict[str, list[int]]:
         """Return {catalog common_name: [7 daily heard-counts]} for the week.
 
@@ -81,29 +102,9 @@ class BirdnetGoReader:
         """Like heard_week but UNFILTERED — every species heard, keyed by
         scientific name (no catalog mapping). The caller resolves display names.
         """
-        if not self.available():
-            return {}
         start = datetime.combine(week_start, time.min)
-        end = start + timedelta(days=7)
-        try:
-            con = self._connect()
-            if con is None:
-                return {}
-            try:
-                rows = con.execute(
-                    "SELECT d.detected_at, l.scientific_name FROM detections d "
-                    "JOIN labels l ON l.id = d.label_id "
-                    "WHERE d.detected_at >= ? AND d.detected_at < ? "
-                    "AND COALESCE(d.unlikely, 0) = 0",
-                    (int(start.timestamp()), int(end.timestamp())),
-                ).fetchall()
-            finally:
-                con.close()
-        except Exception:
-            return {}
-
         out: dict[str, list[int]] = {}
-        for epoch, sci in rows:
+        for epoch, sci in self._detections_between(start, start + timedelta(days=7)):
             if not isinstance(sci, str):
                 continue
             dt = self._safe_dt(epoch)
@@ -112,6 +113,20 @@ class BirdnetGoReader:
             day = (dt.date() - week_start).days
             if 0 <= day < 7:
                 out.setdefault(sci, [0] * 7)[day] += 1
+        return out
+
+    def heard_day_hours(self, day: date) -> dict[str, list[int]]:
+        """Per-scientific hourly heard counts (0..23) for one day, unfiltered —
+        powers the 'heard by hour' grid in the day view."""
+        start = datetime.combine(day, time.min)
+        out: dict[str, list[int]] = {}
+        for epoch, sci in self._detections_between(start, start + timedelta(days=1)):
+            if not isinstance(sci, str):
+                continue
+            dt = self._safe_dt(epoch)
+            if dt is None:
+                continue
+            out.setdefault(sci, [0] * 24)[dt.hour] += 1
         return out
 
     def recent(self, sci_to_common: dict[str, str], limit: int = 14) -> list[dict]:
