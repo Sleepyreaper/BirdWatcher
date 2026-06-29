@@ -9,7 +9,9 @@ services:
       - "1984:1984"   # go2rtc web UI
 
   birdwatcher:
-    build: .
+    build:
+      context: /home/sleepy/BirdWatcher
+      dockerfile: Dockerfile
     image: birdwatcher:latest
     container_name: SleepyBirds
     restart: unless-stopped
