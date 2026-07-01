@@ -25,6 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LABELS = ROOT / "data" / "birdnet_labels.json"
+CRITTERS = ROOT / "data" / "critters.json"
 OUT_DIR = ROOT / "assets" / "reference"
 UA = {"User-Agent": "BirdWatcherBot/0.1 (https://github.com/Sleepyreaper/BirdWatcher; sleepyreaper@gmail.com)"}
 
@@ -69,9 +70,22 @@ def page_image(title: str) -> str | None:
     return None
 
 
+def _pairs() -> dict[str, str]:
+    """{scientific_name: common_name} for every off-catalog label + critter."""
+    out: dict[str, str] = {
+        k: v for k, v in json.loads(LABELS.read_text(encoding="utf-8")).items()
+        if not k.startswith("_")
+    }
+    if CRITTERS.exists():
+        for c in json.loads(CRITTERS.read_text(encoding="utf-8")).get("critters", []):
+            if c.get("scientific_name"):
+                out[c["scientific_name"]] = c["common_name"]
+    return out
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    labels = json.loads(LABELS.read_text(encoding="utf-8"))
+    labels = _pairs()
     fetched = skipped = missed = 0
 
     for sci, common in labels.items():

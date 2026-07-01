@@ -24,9 +24,10 @@ function avatar(sp) {
   const [bg, fg] = pairFor(sp.name);
   return `<div class="av-badge" style="background:${bg};color:${fg}">${initials(sp.name)}</div>`;
 }
-// blue heat ramp for "seen", teal ramp for "heard"
+// blue ramp = "seen", teal = "heard", amber = "critters"
 function heat(c) { if (!c) return null; return c >= 10 ? ["#185FA5","#fff"] : c >= 6 ? ["#378ADD","#fff"] : c >= 3 ? ["#85B7EB","#042C53"] : ["#B5D4F4","#0C447C"]; }
 function heatT(c) { if (!c) return null; return c >= 10 ? ["#0F6E56","#fff"] : c >= 6 ? ["#1D9E75","#fff"] : c >= 3 ? ["#5DCAA5","#04342C"] : ["#9FE1CB","#04342C"]; }
+function heatC(c) { if (!c) return null; return c >= 10 ? ["#8A5117","#fff"] : c >= 6 ? ["#B9781F","#fff"] : c >= 3 ? ["#E0A64E","#3A2600"] : ["#F0D2A0","#5A3B10"]; }
 
 async function loadWeek(start) {
   const seq = ++loadSeq;
@@ -49,6 +50,7 @@ function render(d) {
   s.innerHTML = "";
   s.append(stat(d.stats.visits, "visits this week"), stat(d.stats.species_seen, "species seen"));
   if (d.audio_on) s.append(stat(d.stats.species_heard, "species heard"));
+  if (d.stats.critters) s.append(stat(d.stats.critters, "critters seen"));
   s.append(stat(d.stats.on_list, "on your list"), stat(d.stats.busiest_day, "busiest day"));
 
   document.getElementById("legend-note").innerHTML = d.audio_on ? `🔊 also heard that day — confirmed at the feeder` : "";
@@ -65,10 +67,16 @@ function render(d) {
   });
   g.append(head);
 
+  const critters = d.critters || [];
   const emptyEl = document.getElementById("empty");
   emptyEl.textContent = "No birds yet this week — the feeder's listening.";
-  emptyEl.hidden = d.seen.length > 0 || d.heard_only.length > 0;
+  emptyEl.hidden = d.seen.length > 0 || d.heard_only.length > 0 || critters.length > 0;
   d.seen.forEach((sp) => g.append(seenRow(sp, d, today)));
+
+  if (critters.length) {
+    g.append(el("div", "divider", `<span class="critter">🦝</span> critters &amp; wildlife · caught on camera, not birds`));
+    critters.forEach((sp) => g.append(critterRow(sp, d, today)));
+  }
 
   if (d.heard_only.length) {
     g.append(el("div", "divider", `<span class="sound">🔊</span> heard nearby · numbers are times heard per day`));
@@ -98,6 +106,18 @@ function seenRow(sp, d, today) {
     const heard = sp.heard && sp.heard[i] > 0;
     const cell = cellFor(c, d.days[i] === today, c && heard, heat, `${currentStart}|${sp.name}|${i}`);
     if (c) { cell.title = `${sp.name} — ${d.days[i]}\n${c} visit(s)` + (heard ? " · also heard 🔊" : ""); cell.onclick = () => openDetail(sp, i, d.days[i]); }
+    row.append(cell);
+  });
+  return row;
+}
+
+function critterRow(sp, d, today) {
+  const row = el("div", "row srow");
+  const sub = `${sp.total} visit${sp.total === 1 ? "" : "s"}` + (sp.scientific ? ` · ${sp.scientific}` : "");
+  row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub">${sub}</div></div>`));
+  sp.counts.forEach((c, i) => {
+    const cell = cellFor(c, d.days[i] === today, false, heatC, `${currentStart}|C|${sp.name}|${i}`);
+    if (c) { cell.title = `${sp.name} — ${d.days[i]}\n${c} visit(s)`; cell.onclick = () => openDetail(sp, i, d.days[i]); }
     row.append(cell);
   });
   return row;

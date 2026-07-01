@@ -58,6 +58,14 @@ class BioClipClassifier(SpeciesClassifier):
             (PROJECT_ROOT / "data" / "species_catalog.json").read_text(encoding="utf-8")
         )
         self._names = [s["common_name"] for s in catalog["species"]]
+        # BioCLIP 2 is a whole-tree-of-life model, so we also let it match common
+        # backyard/creek mammals — a chipmunk scores as "Eastern Chipmunk" instead
+        # of being forced into a bird label. The web layer files these under
+        # "Critters" (any name present in critters.json).
+        critters_path = PROJECT_ROOT / "data" / "critters.json"
+        if critters_path.exists():
+            crit = json.loads(critters_path.read_text(encoding="utf-8"))
+            self._names += [c["common_name"] for c in crit.get("critters", [])]
 
         handle = cfg.bioclip_model or "hf-hub:imageomics/bioclip"
         try:

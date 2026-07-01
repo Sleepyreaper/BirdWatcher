@@ -1,0 +1,27 @@
+{
+  "_comment": "Non-bird wildlife the feeder/creek cam may catch. BioCLIP 2 is a whole-tree-of-life model, so adding these common names to the classifier's candidate list lets it name a chipmunk instead of dumping it in 'Unknown bird'. The web app files any sighting whose species is in this list under 'Critters', separate from bird counts. Reference photos fetched by scientific slug via tools/fetch_heard_images.py.",
+  "critters": [
+    {"common_name": "Eastern Gray Squirrel", "scientific_name": "Sciurus carolinensis"},
+    {"common_name": "Eastern Fox Squirrel", "scientific_name": "Sciurus niger"},
+    {"common_name": "Southern Flying Squirrel", "scientific_name": "Glaucomys volans"},
+    {"common_name": "Eastern Chipmunk", "scientific_name": "Tamias striatus"},
+    {"common_name": "Groundhog", "scientific_name": "Marmota monax"},
+    {"common_name": "Eastern Cottontail", "scientific_name": "Sylvilagus floridanus"},
+    {"common_name": "Virginia Opossum", "scientific_name": "Didelphis virginiana"},
+    {"common_name": "Raccoon", "scientific_name": "Procyon lotor"},
+    {"common_name": "Striped Skunk", "scientific_name": "Mephitis mephitis"},
+    {"common_name": "White-tailed Deer", "scientific_name": "Odocoileus virginianus"},
+    {"common_name": "Red Fox", "scientific_name": "Vulpes vulpes"},
+    {"common_name": "Gray Fox", "scientific_name": "Urocyon cinereoargenteus"},
+    {"common_name": "Coyote", "scientific_name": "Canis latrans"},
+    {"common_name": "Bobcat", "scientific_name": "Lynx rufus"},
+    {"common_name": "North American River Otter", "scientific_name": "Lontra canadensis"},
+    {"common_name": "American Beaver", "scientific_name": "Castor canadensis"},
+    {"common_name": "Muskrat", "scientific_name": "Ondatra zibethicus"},
+    {"common_name": "American Mink", "scientific_name": "Neogale vison"},
+    {"common_name": "Nine-banded Armadillo", "scientific_name": "Dasypus novemcinctus"},
+    {"common_name": "American Black Bear", "scientific_name": "Ursus americanus"},
+    {"common_name": "Domestic Cat", "scientific_name": "Felis catus"},
+    {"common_name": "Domestic Dog", "scientific_name": "Canis familiaris"}
+  ]
+}

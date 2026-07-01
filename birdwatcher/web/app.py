@@ -64,6 +64,19 @@ def _load_birdnet_labels() -> dict[str, str]:
     return {k: v for k, v in data.items() if not k.startswith("_")}
 
 
+def _load_critters() -> dict[str, dict]:
+    """common_name -> {common_name, scientific_name} for non-bird wildlife.
+    Any sighting whose species is in this map is filed under 'Critters'."""
+    path = PROJECT_ROOT / "data" / "critters.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {c["common_name"]: c for c in data.get("critters", [])}
+
+
 def _json_error(code: str, status: int = 400):
     return jsonify({"ok": False, "error": code}), status
 
@@ -177,6 +190,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         if sp.get("scientific_name")
     }
     birdnet_labels = _load_birdnet_labels()
+    critters = _load_critters()   # common_name -> meta; these file under "Critters"
     birdnet = BirdnetGoReader(cfg.audio.birdnet_db)
     # Reference photos already on disk — lets off-catalog heard species (hawks,
     # cicadas, frogs) show a picture if tools/fetch_heard_images.py fetched one,
@@ -245,9 +259,21 @@ def create_app(cfg: Config | None = None) -> Flask:
             prev = heard.get(common)
             heard[common] = [a + b for a, b in zip(prev, counts)] if prev else list(counts)
 
-        seen, seen_names = [], set()
+        seen, critter_rows, seen_names = [], [], set()
         per_day = [0] * 7
+        critter_day = [0] * 7
         for sp in grid["species"]:
+            if sp["name"] in critters:
+                cmeta = critters[sp["name"]]
+                sci = cmeta.get("scientific_name")
+                critter_rows.append({
+                    **sp,
+                    "scientific": sci,
+                    "reference": _sci_ref(sci) if sci else None,
+                })
+                for i, c in enumerate(sp["counts"]):
+                    critter_day[i] += c
+                continue
             meta = catalog.get(sp["name"], {})
             seen.append({
                 **sp,
@@ -293,6 +319,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             "next": (week_start + timedelta(days=7)).isoformat(),
             "is_current": week_start == week_start_for(date.today()),
             "seen": seen,
+            "critters": critter_rows,
             "heard_only": heard_only,
             "catalog": catalog_list,
             "audio_on": birdnet.available(),
@@ -300,6 +327,8 @@ def create_app(cfg: Config | None = None) -> Flask:
                 "visits": total,
                 "species_seen": len(seen),
                 "species_heard": len(heard_all),
+                "critters": len(critter_rows),
+                "critter_visits": sum(critter_day),
                 "on_list": len(catalog_list),
                 "busiest_day": DAYS[per_day.index(max(per_day))] if total else "—",
             },

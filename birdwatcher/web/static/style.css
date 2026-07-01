@@ -110,6 +110,7 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .divider::before { flex: 0 0 0; }
 .divider .sound { color: var(--accent); }
+.divider .critter { color: #c98a2e; }
 
 .legend { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; font-size: .68rem; color: var(--text-muted); flex-wrap: wrap; padding: 0 4px; }
 .legend .scale { display: flex; align-items: center; gap: 5px; }
