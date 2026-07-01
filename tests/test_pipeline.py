@@ -40,6 +40,11 @@ class _BoomClassifier:
         raise RuntimeError("boom")
 
 
+class _LowClassifier:
+    def classify(self, crop):
+        return SimpleNamespace(species="Tufted Titmouse", confidence=0.42)
+
+
 @pytest.fixture()
 def pipe(monkeypatch, tmp_path):
     cfg = Config()
@@ -59,6 +64,13 @@ def _visit():
 
 def test_record_classifier_failure_does_not_raise(pipe):
     pipe.classifier = _BoomClassifier()
+    pipe._record(_visit())
+    assert pipe.db.rows == []
+
+
+def test_low_confidence_visit_is_tossed(pipe):
+    """A weak match (below pipeline.min_confidence) is discarded, not recorded."""
+    pipe.classifier = _LowClassifier()          # 0.42, default floor is 0.70
     pipe._record(_visit())
     assert pipe.db.rows == []
 

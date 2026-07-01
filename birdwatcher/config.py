@@ -76,6 +76,13 @@ class PipelineConfig:
     visit_timeout: float = 60.0
     # Ignore blips: only record a visit seen in at least this many frames.
     min_visit_frames: int = 2
+    # Toss a whole visit if the classifier's best match is below this — filters
+    # junk like a squirrel tail that YOLO flagged as a bird and BioCLIP guessed
+    # at 0.40. Set 0 to keep everything (falls back to the classifier's
+    # "Unknown bird" threshold). Heads-up: mammals can score a touch lower than
+    # birds against the bird-heavy label set, so lower this if real critters get
+    # tossed.
+    min_confidence: float = 0.70
     # Save the single best cropped bird image per visit.
     save_crops: bool = True
     # If set, POST each visit to this URL (a remote dashboard's /api/ingest)

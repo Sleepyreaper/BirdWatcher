@@ -114,6 +114,12 @@ class Pipeline:
         except Exception as e:
             print(f"[pipeline] classify failed: {e}")
             return
+        # Toss weak matches outright (squirrel tail scored 0.4 as a titmouse, etc.)
+        if result.confidence < self.cfg.pipeline.min_confidence:
+            print(f"[pipeline] {v.first_seen:%H:%M:%S}  tossed {result.species} "
+                  f"({result.confidence:.2f} < {self.cfg.pipeline.min_confidence:.2f}) "
+                  f"— not a clean match")
+            return
         species = result.species
         if result.confidence < self.cfg.classifier.min_confidence:
             species = "Unknown bird"

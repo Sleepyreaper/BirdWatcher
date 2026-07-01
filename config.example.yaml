@@ -18,11 +18,17 @@ web:
 classifier:
   backend: "bioclip"
   bioclip_model: "hf-hub:imageomics/bioclip-2"
-  min_confidence: 0.25
+  min_confidence: 0.25   # below this a bird is labeled "Unknown bird" (if kept at all)
 
 detector:
   model: "yolov8n.pt"
   min_confidence: 0.35
+
+pipeline:
+  # Toss a visit whose best species match is below this — kills junk like a
+  # squirrel tail scored 0.40 as a Tufted Titmouse. Lower it if real critters
+  # (mammals score a bit lower vs the bird-heavy labels) start getting tossed.
+  min_confidence: 0.70
 
 audio:
   birdnet_db: ""   # /data/birdnet-go/birdnet.db when birdnet-go container is running
