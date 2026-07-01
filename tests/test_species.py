@@ -20,7 +20,9 @@ def test_species_detail_buckets_by_hour(tmp_path):
     db.close()
 
 
-def test_species_api_route(cfg, client):
+def test_species_api_route(cfg, client, monkeypatch):
+    # keep the Wikipedia "about" fetch offline in tests
+    monkeypatch.setattr("birdwatcher.web.app._wiki_summary", lambda title: None)
     db = Database(cfg.paths.db_path())
     db.add_visit("Northern Cardinal", 0.95, image_path="c.jpg", first_ts=datetime.now())
     db.close()

@@ -12,6 +12,9 @@ import binascii
 import json
 import os
 import tempfile
+import threading
+import urllib.parse
+import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -75,6 +78,25 @@ def _load_critters() -> dict[str, dict]:
     except (OSError, json.JSONDecodeError):
         return {}
     return {c["common_name"]: c for c in data.get("critters", [])}
+
+
+_WIKI_UA = "BirdWatcherBot/0.1 (https://github.com/Sleepyreaper/BirdWatcher; sleepyreaper@gmail.com)"
+
+
+def _wiki_summary(title: str) -> dict | None:
+    """Concise 'about' blurb for a species from Wikipedia's REST summary API."""
+    url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(
+        title.replace(" ", "_")
+    )
+    req = urllib.request.Request(url, headers={"User-Agent": _WIKI_UA})
+    with urllib.request.urlopen(req, timeout=8) as fh:
+        d = json.loads(fh.read().decode())
+    if d.get("type") == "disambiguation" or not d.get("extract"):
+        return None
+    return {
+        "extract": d["extract"],
+        "url": d.get("content_urls", {}).get("desktop", {}).get("page", ""),
+    }
 
 
 def _json_error(code: str, status: int = 400):
@@ -192,6 +214,40 @@ def create_app(cfg: Config | None = None) -> Flask:
     birdnet_labels = _load_birdnet_labels()
     critters = _load_critters()   # common_name -> meta; these file under "Critters"
     birdnet = BirdnetGoReader(cfg.audio.birdnet_db)
+
+    # "About this bird" blurbs — fetched from Wikipedia on first view of a
+    # species, then cached to the data volume so it's instant afterward.
+    facts_path = cfg.paths.db_path().parent / "species_facts.json"
+    try:
+        facts_cache = json.loads(facts_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        facts_cache = {}
+    facts_lock = threading.Lock()
+
+    def get_facts(sci: str | None, common: str) -> dict:
+        key = sci or common
+        if not key:
+            return {}
+        if key in facts_cache:
+            return facts_cache[key]
+        result = {}
+        for title in (common, sci):
+            if not title:
+                continue
+            try:
+                r = _wiki_summary(title)
+            except Exception:
+                r = None
+            if r:
+                result = r
+                break
+        with facts_lock:
+            facts_cache[key] = result
+            try:
+                facts_path.write_text(json.dumps(facts_cache, indent=2), encoding="utf-8")
+            except OSError:
+                pass
+        return result
     # Reference photos already on disk — lets off-catalog heard species (hawks,
     # cicadas, frogs) show a picture if tools/fetch_heard_images.py fetched one,
     # saved as <scientific-slug>.jpg. Scanned once at startup.
@@ -256,6 +312,7 @@ def create_app(cfg: Config | None = None) -> Flask:
                     "reference": ref, "kind": "bird"}
         heard = birdnet.heard_total(sci) if sci else 0
         return jsonify({**detail, **meta, "heard_total": heard,
+                        "facts": get_facts(sci, name),
                         "audio_on": birdnet.available(), "region": region})
 
     @app.route("/api/week")

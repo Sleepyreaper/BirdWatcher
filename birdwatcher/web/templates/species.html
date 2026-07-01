@@ -20,6 +20,12 @@
 
     .sect { font-size: .72rem; text-transform: uppercase; letter-spacing: .6px; color: var(--text-muted); font-weight: 700; margin: 26px 0 12px; }
 
+    .about { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+      border-radius: 10px; padding: 14px 16px; font-size: .9rem; line-height: 1.55; color: var(--text-soft); margin: 0; }
+    .about.critter { border-left-color: #c98a2e; }
+    .about a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+    .about a:hover { text-decoration: underline; }
+
     /* hour-of-day activity */
     .hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; height: 120px; }
     .hbar { background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; position: relative; transition: filter .1s; }
@@ -52,6 +58,9 @@
   <main class="sp-wrap">
     <div class="sp-hero" id="hero"></div>
     <section id="stats" class="stats"></section>
+
+    <div class="sect" id="about-label" hidden>About</div>
+    <p id="about" class="about" hidden></p>
 
     <div class="sect">Activity by hour of day</div>
     <div class="hours" id="hours"></div>
@@ -118,6 +127,16 @@
         stat(Math.round((d.best_confidence||0)*100)+"%", "best match"),
       );
       if (d.audio_on && d.heard_total) s.append(stat(d.heard_total, "times heard"));
+
+      // about / facts
+      if (d.facts && d.facts.extract) {
+        document.getElementById("about-label").hidden = false;
+        const a = document.getElementById("about");
+        a.className = "about" + (critter ? " critter" : "");
+        a.hidden = false;
+        const link = d.facts.url ? ` <a href="${d.facts.url}" target="_blank">Wikipedia →</a>` : "";
+        a.innerHTML = d.facts.extract + link;
+      }
 
       // hourly chart
       const hours = d.hourly || new Array(24).fill(0);
