@@ -98,10 +98,17 @@ function cellFor(count, isToday, heard, ramp, key) {
   return cell;
 }
 
+// species label that links to the per-species page
+function speciesLabel(sp, subHtml) {
+  const a = el("a", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub">${subHtml}</div></div>`);
+  a.href = `/species/${encodeURIComponent(sp.name)}`;
+  return a;
+}
+
 function seenRow(sp, d, today) {
   const row = el("div", "row srow");
   const sub = `${sp.total} visit${sp.total === 1 ? "" : "s"}` + (sp.scientific ? ` · ${sp.scientific}` : "");
-  row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub">${sub}</div></div>`));
+  row.append(speciesLabel(sp, sub));
   sp.counts.forEach((c, i) => {
     const heard = sp.heard && sp.heard[i] > 0;
     const cell = cellFor(c, d.days[i] === today, c && heard, heat, `${currentStart}|${sp.name}|${i}`);
@@ -114,7 +121,7 @@ function seenRow(sp, d, today) {
 function critterRow(sp, d, today) {
   const row = el("div", "row srow");
   const sub = `${sp.total} visit${sp.total === 1 ? "" : "s"}` + (sp.scientific ? ` · ${sp.scientific}` : "");
-  row.append(el("div", "species", `${avatar(sp)}<div style="min-width:0"><div class="nm">${sp.name}</div><div class="sub">${sub}</div></div>`));
+  row.append(speciesLabel(sp, sub));
   sp.counts.forEach((c, i) => {
     const cell = cellFor(c, d.days[i] === today, false, heatC, `${currentStart}|C|${sp.name}|${i}`);
     if (c) { cell.title = `${sp.name} — ${d.days[i]}\n${c} visit(s)`; cell.onclick = () => openDetail(sp, i, d.days[i]); }

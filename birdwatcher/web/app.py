@@ -237,6 +237,27 @@ def create_app(cfg: Config | None = None) -> Flask:
     def review():
         return render_template("review.html")
 
+    @app.route("/species/<path:name>")
+    def species_page(name):
+        return render_template("species.html", name=name)
+
+    @app.route("/api/species/<path:name>")
+    def api_species(name):
+        detail = get_db().species_detail(name)
+        if name in critters:
+            sci = critters[name].get("scientific_name")
+            meta = {"scientific": sci, "family": None,
+                    "reference": _sci_ref(sci) if sci else None, "kind": "critter"}
+        else:
+            cm = catalog.get(name, {})
+            sci = cm.get("scientific_name")
+            ref = _ref_url(cm.get("reference_image")) or (_sci_ref(sci) if sci else None)
+            meta = {"scientific": sci, "family": cm.get("family"),
+                    "reference": ref, "kind": "bird"}
+        heard = birdnet.heard_total(sci) if sci else 0
+        return jsonify({**detail, **meta, "heard_total": heard,
+                        "audio_on": birdnet.available(), "region": region})
+
     @app.route("/api/week")
     def api_week():
         start_param = request.args.get("start")

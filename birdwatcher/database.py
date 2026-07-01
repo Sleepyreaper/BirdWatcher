@@ -240,6 +240,48 @@ class Database:
             "species": species_payload,
         }
 
+    def species_detail(self, name: str, photo_limit: int = 60) -> dict:
+        """Everything about one species for its detail page: every photo, the
+        hour-of-day activity pattern, daily counts, and first/last seen."""
+        rows = self._conn.execute(
+            "SELECT ts, confidence, image_path FROM sightings "
+            "WHERE COALESCE(verified_species, species) = ? AND COALESCE(rejected, 0) = 0 "
+            "ORDER BY ts DESC",
+            (name,),
+        ).fetchall()
+
+        hourly = [0] * 24
+        by_date: dict[str, int] = {}
+        photos: list[dict] = []
+        best = 0.0
+        first_ts = last_ts = None
+        for r in rows:
+            ts = datetime.fromisoformat(r["ts"])
+            hourly[ts.hour] += 1
+            d = ts.date().isoformat()
+            by_date[d] = by_date.get(d, 0) + 1
+            best = max(best, r["confidence"] or 0.0)
+            if last_ts is None:
+                last_ts = r["ts"]          # rows are newest-first
+            first_ts = r["ts"]             # ...so the final row is the earliest
+            if r["image_path"] and len(photos) < photo_limit:
+                photos.append({
+                    "image_path": r["image_path"],
+                    "ts": r["ts"],
+                    "confidence": r["confidence"],
+                })
+
+        return {
+            "name": name,
+            "total": len(rows),
+            "first_ts": first_ts,
+            "last_ts": last_ts,
+            "best_confidence": best,
+            "hourly": hourly,
+            "by_date": by_date,
+            "photos": photos,
+        }
+
 
 def week_start_for(d: date) -> date:
     """Sunday that begins the week containing date d (Sun=start, Sat=end)."""

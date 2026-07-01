@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Species · BirdWatcher</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    .sp-wrap { max-width: 960px; margin: 0 auto; padding: 8px 28px 56px; }
+    .sp-hero { display: flex; gap: 18px; align-items: center; margin: 8px 0 18px; }
+    .sp-hero img, .sp-hero .noimg { width: 120px; height: 120px; border-radius: 14px; object-fit: cover; flex: none; background: var(--surface-soft); }
+    .sp-hero .noimg { display: grid; place-items: center; font-size: 34px; font-weight: 700; color: var(--text-muted); }
+    .sp-hero h1 { margin: 0; font-size: 1.6rem; font-weight: 700; }
+    .sp-hero .sci { color: var(--text-muted); font-size: .85rem; margin-top: 3px; font-style: italic; }
+    .sp-hero .kind { display: inline-block; margin-top: 8px; font-size: .68rem; text-transform: uppercase; letter-spacing: .5px;
+      padding: 3px 9px; border-radius: 20px; font-weight: 700; }
+    .kind.bird { background: rgba(63,184,132,.16); color: var(--accent); }
+    .kind.critter { background: rgba(201,138,46,.18); color: #c98a2e; }
+    .sp-listen { margin-left: 8px; font-size: .72rem; text-decoration: none; color: var(--accent); }
+
+    .sect { font-size: .72rem; text-transform: uppercase; letter-spacing: .6px; color: var(--text-muted); font-weight: 700; margin: 26px 0 12px; }
+
+    /* hour-of-day activity */
+    .hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; height: 120px; }
+    .hbar { background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; position: relative; transition: filter .1s; }
+    .hbar.critter { background: #c98a2e; }
+    .hbar:hover { filter: brightness(1.15); }
+    .hbar .n { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: .6rem; color: var(--text-soft); }
+    .hlabels { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; margin-top: 5px; }
+    .hlabels span { font-size: .55rem; color: var(--text-muted); text-align: center; }
+
+    /* photo gallery */
+    .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+    .gcard { border-radius: 11px; overflow: hidden; background: var(--surface-soft); cursor: pointer; border: 1px solid var(--line); }
+    .gcard img { width: 100%; height: 130px; object-fit: cover; display: block; }
+    .gcard .cap { padding: 5px 8px; font-size: .66rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .empty { color: var(--text-muted); padding: 40px; text-align: center; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>🐦 BirdWatcher</h1>
+      <div class="region" id="region">…</div>
+    </div>
+    <div class="right">
+      <a class="iconbtn" href="/" title="Back to dashboard" style="width:auto;padding:0 10px;font-size:.8rem;text-decoration:none">← dashboard</a>
+      <button class="iconbtn" id="theme" title="Toggle light / dark">◐</button>
+    </div>
+  </header>
+
+  <main class="sp-wrap">
+    <div class="sp-hero" id="hero"></div>
+    <section id="stats" class="stats"></section>
+
+    <div class="sect">Activity by hour of day</div>
+    <div class="hours" id="hours"></div>
+    <div class="hlabels" id="hlabels"></div>
+
+    <div class="sect" id="gallery-label">Every photo caught</div>
+    <div class="gallery" id="gallery"></div>
+    <p id="empty" class="empty" hidden>No photos yet — this one's only been heard, not seen.</p>
+  </main>
+
+  <div id="lightbox" class="lightbox" hidden>
+    <div class="lightbox-inner">
+      <button id="lb-close" class="lb-close" aria-label="close">×</button>
+      <div id="lb-body"></div>
+    </div>
+  </div>
+
+  <script>
+    function applyTheme(t){ document.documentElement.setAttribute("data-theme", t); localStorage.setItem("bw-theme", t); }
+    applyTheme(localStorage.getItem("bw-theme") || "dark");
+    document.getElementById("theme").onclick = () =>
+      applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
+    document.getElementById("lb-close").onclick = () => (document.getElementById("lightbox").hidden = true);
+    document.getElementById("lightbox").onclick = (e) => { if (e.target.id === "lightbox") e.target.hidden = true; };
+
+    const NAME = decodeURIComponent(location.pathname.split("/species/")[1] || "");
+    function fmtDate(iso){ if(!iso) return "—"; return new Date(iso).toLocaleDateString(undefined,{month:"short",day:"numeric"}); }
+    function ago(iso){
+      if(!iso) return "—";
+      const s = Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
+      if(s<3600) return Math.floor(s/60)+"m ago";
+      if(s<86400) return Math.floor(s/3600)+"h ago";
+      const d=Math.floor(s/86400); return d<7? d+"d ago" : fmtDate(iso);
+    }
+    function hourLabel(h){ return `${h%12||12}${h<12?"a":"p"}`; }
+    function initials(n){ const w=n.split(/\s+/); return (((w[0]||" ")[0])+((w[1]||w[0]||" ")[0])).toUpperCase(); }
+    function stat(n,l){ const e=document.createElement("div"); e.className="stat"; e.innerHTML=`<div class="num">${n}</div><div class="lbl">${l}</div>`; return e; }
+
+    async function load(){
+      const d = await (await fetch(`/api/species/${encodeURIComponent(NAME)}`)).json();
+      document.getElementById("region").textContent = d.region?.name || "";
+      document.title = `${d.name} · BirdWatcher`;
+      const critter = d.kind === "critter";
+
+      // hero
+      const hero = document.getElementById("hero");
+      const pic = d.reference
+        ? `<img src="${d.reference}" alt="">`
+        : `<div class="noimg">${initials(d.name)}</div>`;
+      const listen = (d.audio_on && d.heard_total)
+        ? `<a class="sp-listen" href="http://${location.hostname}:8090" target="_blank">🔊 heard ${d.heard_total}× · listen</a>` : "";
+      hero.innerHTML = `${pic}<div>
+        <h1>${d.name}</h1>
+        <div class="sci">${[d.scientific, d.family].filter(Boolean).join(" · ")}</div>
+        <span class="kind ${critter?"critter":"bird"}">${critter?"🦝 critter":"🐦 bird"}</span>${listen}
+      </div>`;
+
+      // stats
+      const s = document.getElementById("stats");
+      s.append(
+        stat(d.total, "total visits"),
+        stat(fmtDate(d.first_ts), "first seen"),
+        stat(ago(d.last_ts), "last seen"),
+        stat(Math.round((d.best_confidence||0)*100)+"%", "best match"),
+      );
+      if (d.audio_on && d.heard_total) s.append(stat(d.heard_total, "times heard"));
+
+      // hourly chart
+      const hours = d.hourly || new Array(24).fill(0);
+      const max = Math.max(1, ...hours);
+      const hbox = document.getElementById("hours"), lbox = document.getElementById("hlabels");
+      hours.forEach((n,h) => {
+        const bar = document.createElement("div");
+        bar.className = "hbar" + (critter?" critter":"");
+        bar.style.height = (n ? Math.max(4, (n/max)*100) : 0) + "%";
+        bar.title = `${hourLabel(h)} · ${n} visit(s)`;
+        if (n) bar.innerHTML = `<span class="n">${n}</span>`;
+        hbox.append(bar);
+        const lab = document.createElement("span");
+        lab.textContent = h % 3 === 0 ? hourLabel(h) : "";
+        lbox.append(lab);
+      });
+
+      // gallery
+      const g = document.getElementById("gallery"), photos = d.photos || [];
+      document.getElementById("gallery-label").textContent = `Every photo caught (${photos.length})`;
+      if (!photos.length) { document.getElementById("empty").hidden = false; return; }
+      photos.forEach((p) => {
+        const c = document.createElement("div"); c.className = "gcard";
+        c.innerHTML = `<img src="/captures/${p.image_path}" alt="" loading="lazy">
+          <div class="cap"><span>${ago(p.ts)}</span><span>${Math.round((p.confidence||0)*100)}%</span></div>`;
+        c.onclick = () => {
+          document.getElementById("lb-body").innerHTML =
+            `<h3 style="margin:0 0 10px">${d.name}</h3><img src="/captures/${p.image_path}" style="max-width:80vw;max-height:72vh;border-radius:10px;display:block">`;
+          document.getElementById("lightbox").hidden = false;
+        };
+        g.append(c);
+      });
+    }
+    load();
+  </script>
+</body>
+</html>

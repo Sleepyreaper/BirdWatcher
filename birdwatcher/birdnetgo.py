@@ -129,6 +129,26 @@ class BirdnetGoReader:
             out.setdefault(sci, [0] * 24)[dt.hour] += 1
         return out
 
+    def heard_total(self, scientific_name: str) -> int:
+        """All-time detection count for a scientific name (0 if none/unavailable)."""
+        if not self.available() or not scientific_name:
+            return 0
+        try:
+            con = self._connect()
+            if con is None:
+                return 0
+            try:
+                row = con.execute(
+                    "SELECT COUNT(*) FROM detections d JOIN labels l ON l.id = d.label_id "
+                    "WHERE l.scientific_name = ? AND COALESCE(d.unlikely, 0) = 0",
+                    (scientific_name,),
+                ).fetchone()
+                return int(row[0]) if row else 0
+            finally:
+                con.close()
+        except Exception:
+            return 0
+
     def recent(self, sci_to_common: dict[str, str], limit: int = 14) -> list[dict]:
         """Most recent heard detections (newest first), mapped to our catalog."""
         if not self.available():
