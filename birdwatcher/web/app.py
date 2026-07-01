@@ -38,6 +38,10 @@ def _ref_url(reference_image: str | None) -> str | None:
     return "/reference/" + reference_image.rsplit("/", 1)[-1]
 
 
+def _slug(name: str) -> str:
+    return name.lower().replace(" ", "-").replace("'", "").replace("/", "-")
+
+
 def _load_catalog() -> tuple[dict, dict]:
     path = PROJECT_ROOT / "data" / "species_catalog.json"
     if not path.exists():
@@ -174,11 +178,20 @@ def create_app(cfg: Config | None = None) -> Flask:
     }
     birdnet_labels = _load_birdnet_labels()
     birdnet = BirdnetGoReader(cfg.audio.birdnet_db)
+    # Reference photos already on disk — lets off-catalog heard species (hawks,
+    # cicadas, frogs) show a picture if tools/fetch_heard_images.py fetched one,
+    # saved as <scientific-slug>.jpg. Scanned once at startup.
+    ref_files = {p.name for p in REFERENCE_DIR.glob("*.jpg")} if REFERENCE_DIR.exists() else set()
+
+    def _sci_ref(sci: str) -> str | None:
+        fn = _slug(sci) + ".jpg"
+        return ("/reference/" + fn) if fn in ref_files else None
 
     def _heard_display(sci: str) -> dict:
         """Resolve a scientific name to display fields. Catalog species get
-        their common name + reference photo; off-list species fall back to the
-        BirdNET label map, then to the raw scientific name."""
+        their common name + reference photo; off-list species use the BirdNET
+        label map for a real name and a fetched photo if we have one, then fall
+        back to the raw scientific name."""
         common = sci_to_common.get(sci)
         if common:
             meta = catalog.get(common, {})
@@ -193,7 +206,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             "name": birdnet_labels.get(sci, sci),
             "scientific": sci,
             "family": None,
-            "reference": None,
+            "reference": _sci_ref(sci),
             "off_list": True,
         }
 

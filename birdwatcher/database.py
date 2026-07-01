@@ -218,15 +218,15 @@ class Database:
         for name, by_day in agg.items():
             counts = [len(by_day.get(i, [])) for i in range(7)]
             times = [[t[0] for t in by_day.get(i, [])] for i in range(7)]
-            best = max(
-                (item for day in by_day.values() for item in day),
-                key=lambda x: x[2],
-                default=(None, None, 0, None),
-            )
+            items = [item for day in by_day.values() for item in day]
+            best = max(items, key=lambda x: x[2], default=(None, None, 0, None))
+            with_img = [it for it in items if it[1]]  # items carry (t, path, conf, ts)
+            latest = max(with_img, key=lambda x: x[3], default=(None, None, 0, None))
             species_payload.append(
                 {
                     "name": name,
-                    "thumb": best[1],
+                    "thumb": best[1],       # sharpest / most confident crop
+                    "latest": latest[1],    # most recent crop
                     "total": sum(counts),
                     "counts": counts,
                     "times": times,

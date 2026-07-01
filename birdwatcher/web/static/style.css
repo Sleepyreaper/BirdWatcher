@@ -84,9 +84,9 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .srow { padding: 2px 0; border-radius: 8px; transition: background .1s; }
 .srow:hover { background: var(--surface-soft); }
 
-.species { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 0 4px; }
-.av { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; flex: none; background: var(--surface-soft); }
-.av-badge { width: 34px; height: 34px; border-radius: 8px; flex: none; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.species { display: flex; align-items: center; gap: 11px; min-width: 0; padding: 0 4px; }
+.av { width: 46px; height: 46px; border-radius: 9px; object-fit: cover; flex: none; background: var(--surface-soft); }
+.av-badge { width: 46px; height: 46px; border-radius: 9px; flex: none; display: grid; place-items: center; font-size: 14px; font-weight: 700; }
 .species .nm { font-size: .84rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .species .sub { font-size: .68rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 

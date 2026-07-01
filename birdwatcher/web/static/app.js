@@ -241,14 +241,16 @@ function heardHourRow(sp, nowH) {
 function openDetail(sp, dayIdx, dayIso) {
   const body = document.getElementById("lb-body");
   const ref = sp.reference ? `<figure><img src="${sp.reference}"><figcaption>field guide</figcaption></figure>` : "";
-  const cap = sp.thumb ? `<figure><img src="/captures/${sp.thumb}"><figcaption>best frame caught</figcaption></figure>` : "";
+  const best = sp.thumb ? `<figure><img src="/captures/${sp.thumb}"><figcaption>★ best shot</figcaption></figure>` : "";
+  const last = (sp.latest && sp.latest !== sp.thumb)
+    ? `<figure><img src="/captures/${sp.latest}"><figcaption>last seen</figcaption></figure>` : "";
   const times = sp.times[dayIdx] || [];
   const heard = sp.heard && sp.heard[dayIdx] > 0;
   body.innerHTML =
     `<h3>${sp.name}${heard ? " 🔊" : ""}</h3>` +
     `<div class="sci">${[sp.scientific, sp.family].filter(Boolean).join(" · ")}</div>` +
-    `<div class="shots">${ref}${cap}</div>` +
-    (cap ? `<div class="note">best frame kept from the visit; blurrier ones discarded</div>` : "") +
+    `<div class="shots">${ref}${best}${last}</div>` +
+    (best ? `<div class="note">★ best = sharpest crop we kept · last seen = most recent visit</div>` : "") +
     (heard ? `<div class="note heard">🔊 heard here too — confirmed at the feeder by sound</div>` : "") +
     `<div class="kv"><span>${dayIso}</span><span>${times.length} visit(s)${times.length ? " · " + times.join(", ") : ""}</span></div>`;
   document.getElementById("lightbox").hidden = false;
@@ -306,6 +308,10 @@ function applyTheme(t) { document.documentElement.setAttribute("data-theme", t);
 applyTheme(localStorage.getItem("bw-theme") || "dark");
 document.getElementById("theme").onclick = () =>
   applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light");
+
+// BirdNET-Go lives on the same host, port 8090 — link relative to wherever we're served
+const birdnetLink = document.getElementById("birdnet-link");
+if (birdnetLink) birdnetLink.href = `http://${location.hostname}:8090`;
 
 document.getElementById("prev").onclick = () => step(-1);
 document.getElementById("next").onclick = () => step(1);

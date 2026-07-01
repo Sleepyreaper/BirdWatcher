@@ -70,6 +70,19 @@
   "Zonotrichia leucophrys": "White-crowned Sparrow",
   "Pipilo erythrophthalmus": "Eastern Towhee",
   "Pterophylla camellifolia": "Common True Katydid (insect)",
+  "Neotibicen tibicen": "Swamp Cicada (insect)",
+  "Neotibicen canicularis": "Dog-day Cicada (insect)",
+  "Neotibicen linnei": "Linne's Cicada (insect)",
+  "Neotibicen lyricen": "Lyric Cicada (insect)",
+  "Megatibicen resh": "Resh Cicada (insect)",
+  "Magicicada septendecim": "Pharaoh Cicada (insect)",
+  "Gryllus pennsylvanicus": "Fall Field Cricket (insect)",
+  "Oecanthus fultoni": "Snowy Tree Cricket (insect)",
   "Hyla cinerea": "Green Treefrog (amphibian)",
-  "Pseudacris crucifer": "Spring Peeper (amphibian)"
+  "Dryophytes cinereus": "Green Treefrog (amphibian)",
+  "Hyla chrysoscelis": "Cope's Gray Treefrog (amphibian)",
+  "Pseudacris crucifer": "Spring Peeper (amphibian)",
+  "Lithobates clamitans": "Green Frog (amphibian)",
+  "Lithobates catesbeianus": "American Bullfrog (amphibian)",
+  "Anaxyrus americanus": "American Toad (amphibian)"
 }
