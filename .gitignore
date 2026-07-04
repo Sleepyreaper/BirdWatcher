@@ -5,7 +5,8 @@ config.yaml
 data/birdwatcher.db
 data/captures/
 data/library/
-data/species_facts.json   # generated Wikipedia "about" cache
+# generated Wikipedia "about" cache
+data/species_facts.json
 data/*.log
 data/*.err
 *.db
