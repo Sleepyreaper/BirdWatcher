@@ -289,6 +289,10 @@ def create_app(cfg: Config | None = None) -> Flask:
     def index():
         return render_template("index.html")
 
+    @app.route("/critters")
+    def critterwatch():
+        return render_template("critters.html")
+
     @app.route("/review")
     def review():
         return render_template("review.html")
@@ -322,14 +326,17 @@ def create_app(cfg: Config | None = None) -> Flask:
     @app.route("/api/week")
     def api_week():
         start_param = request.args.get("start")
+        source = request.args.get("source")   # None = all cameras; "feeder"/"creek" to scope
         week_start = date.fromisoformat(start_param) if start_param else week_start_for(date.today())
-        grid = get_db().week_grid(week_start)
-        # Every species heard this week, keyed by scientific name (unfiltered),
-        # so the dashboard mirrors BirdNET-Go instead of only the 32 catalog birds.
-        try:
-            heard_all = birdnet.heard_week_all(week_start)
-        except Exception:
+        grid = get_db().week_grid(week_start, source=source)
+        # Audio (BirdNET-Go) is the feeder cam's mic only — skip it on other cams.
+        if source and source != "feeder":
             heard_all = {}
+        else:
+            try:
+                heard_all = birdnet.heard_week_all(week_start)
+            except Exception:
+                heard_all = {}
 
         # Catalog-name overlay {common: [7]} for the 🔊 marks on seen rows and
         # the "heard" flag in the catalog list — derived from the same query.
@@ -427,8 +434,9 @@ def create_app(cfg: Config | None = None) -> Flask:
     @app.route("/api/day")
     def api_day():
         dparam = request.args.get("date")
+        source = request.args.get("source")
         day = date.fromisoformat(dparam) if dparam else date.today()
-        grid = get_db().day_hours(day)
+        grid = get_db().day_hours(day, source=source)
 
         species = []
         per_hour = [0] * 24
@@ -442,11 +450,13 @@ def create_app(cfg: Config | None = None) -> Flask:
             for h, c in enumerate(sp["counts"]):
                 per_hour[h] += c
 
-        # Heard-by-hour (acoustic) — the bottom grid, mirroring BirdNET-Go.
-        try:
-            heard_raw = birdnet.heard_day_hours(day)
-        except Exception:
-            heard_raw = {}
+        # Heard-by-hour (acoustic) — feeder cam's mic only.
+        heard_raw = {}
+        if not source or source == "feeder":
+            try:
+                heard_raw = birdnet.heard_day_hours(day)
+            except Exception:
+                heard_raw = {}
         heard = []
         for sci, counts in heard_raw.items():
             disp = _heard_display(sci)
@@ -481,8 +491,9 @@ def create_app(cfg: Config | None = None) -> Flask:
     @app.route("/api/recent")
     def api_recent():
         limit = int(request.args.get("limit", 14))
+        source = request.args.get("source")
         items = []
-        for v in get_db().recent_visits(limit):
+        for v in get_db().recent_visits(limit, source=source):
             meta = catalog.get(v["species"], {})
             items.append({
                 "kind": "seen",
@@ -494,7 +505,7 @@ def create_app(cfg: Config | None = None) -> Flask:
                 "ts": v["last_ts"] or v["ts"],
             })
         try:
-            heard_items = birdnet.recent(sci_to_common, limit)
+            heard_items = [] if (source and source != "feeder") else birdnet.recent(sci_to_common, limit)
         except Exception:
             heard_items = []
         for h in heard_items:

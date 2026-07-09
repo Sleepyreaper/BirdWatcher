@@ -9,6 +9,9 @@ let currentDay = null;
 let view = "week";          // "week" heat-grid | "day" hourly drill-down
 let loadSeq = 0;            // last navigation wins, even if an older fetch returns later
 const LAST = {};  // last-seen count per cell, to pulse when it rises
+// Which camera this page shows: BirdWatcher (/) = feeder, CritterWatch (/critters) = creek.
+const MODE = window.BW_MODE || "feeder";
+const SOURCE = MODE === "creek" ? "creek" : "feeder";
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -32,8 +35,9 @@ function heatP(c) { if (!c) return null; return c >= 10 ? ["#3E4757","#fff"] : c
 
 async function loadWeek(start) {
   const seq = ++loadSeq;
-  const url = start ? `/api/week?start=${start}` : "/api/week";
-  const d = await (await fetch(url)).json();
+  const p = new URLSearchParams({ source: SOURCE });
+  if (start) p.set("start", start);
+  const d = await (await fetch(`/api/week?${p}`)).json();
   if (seq !== loadSeq) return;   // superseded by a newer navigation
   currentStart = d.start;
   render(d);
@@ -71,8 +75,10 @@ function render(d) {
 
   const critters = d.critters || [];
   const emptyEl = document.getElementById("empty");
-  emptyEl.textContent = "No birds yet this week — the feeder's listening.";
-  emptyEl.hidden = d.seen.length > 0 || d.heard_only.length > 0 || critters.length > 0;
+  emptyEl.textContent = MODE === "creek"
+    ? "No wildlife yet this week — the creek cam's watching."
+    : "No birds yet this week — the feeder's listening.";
+  emptyEl.hidden = d.seen.length > 0 || d.heard_only.length > 0 || critters.length > 0 || (d.people || []).length > 0;
   d.seen.forEach((sp) => g.append(seenRow(sp, d, today)));
 
   if (critters.length) {
@@ -90,10 +96,12 @@ function render(d) {
     g.append(el("div", "divider", `<span class="sound">🔊</span> heard nearby · numbers are times heard per day`));
     d.heard_only.forEach((sp) => g.append(heardRow(sp, d, today)));
   }
-  const expected = d.catalog.filter((c) => !c.seen && !c.heard);
-  if (expected.length) {
-    g.append(el("div", "divider", `on your Cole's Special Feeder list · not seen this week`));
-    expected.forEach((sp) => g.append(expectedRow(sp)));
+  if (MODE !== "creek") {
+    const expected = d.catalog.filter((c) => !c.seen && !c.heard);
+    if (expected.length) {
+      g.append(el("div", "divider", `on your Cole's Special Feeder list · not seen this week`));
+      expected.forEach((sp) => g.append(expectedRow(sp)));
+    }
   }
   renderNow(d, today);
 }
@@ -196,8 +204,9 @@ function renderNow(d, today) {
 // --- hourly "today" drill-down ----------------------------------------------
 async function loadDay(dateIso) {
   const seq = ++loadSeq;
-  const url = dateIso ? `/api/day?date=${dateIso}` : "/api/day";
-  const d = await (await fetch(url)).json();
+  const p = new URLSearchParams({ source: SOURCE });
+  if (dateIso) p.set("date", dateIso);
+  const d = await (await fetch(`/api/day?${p}`)).json();
   if (seq !== loadSeq) return;   // superseded by a newer navigation
   renderDay(d);
 }
@@ -340,15 +349,16 @@ function openShot(it) {
 // one "last visited" card — the full history lives in the grid below
 async function loadRecent() {
   let d;
-  try { d = await (await fetch("/api/recent?limit=8")).json(); } catch { return; }
+  try { d = await (await fetch(`/api/recent?limit=8&source=${SOURCE}`)).json(); } catch { return; }
   const wrap = document.getElementById("recent");
   const card = document.getElementById("lv-card");
   const items = d.items || [];
   const it = items.find((x) => x.kind === "seen");
   if (!it) { wrap.hidden = true; return; }
   const tag = it.confidence ? `${Math.round(it.confidence * 100)}% match` : "";
+  const lvLabel = MODE === "creek" ? "last on the creek cam" : "last seen at feeder";
   card.innerHTML =
-    `${recentPhoto(it)}<div class="lv-meta"><div class="lv-label">last seen at feeder</div>` +
+    `${recentPhoto(it)}<div class="lv-meta"><div class="lv-label">${lvLabel}</div>` +
     `<div class="lv-name">${it.name}</div><div class="lv-sub">${ago(it.ts)}${tag ? " · " + tag : ""}</div></div>`;
   card.onclick = () => openShot(it);
   wrap.hidden = false;

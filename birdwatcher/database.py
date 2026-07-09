@@ -164,25 +164,31 @@ class Database:
         return {r["species"]: r["c"] for r in rows}
 
     # --- reads for the UI -------------------------------------------------
-    def recent_visits(self, limit: int = 14) -> list[dict]:
+    def recent_visits(self, limit: int = 14, source: str | None = None) -> list[dict]:
         """Most recent visits (newest first) for the live activity feed."""
-        rows = self._conn.execute(
-            "SELECT id, ts, last_ts, COALESCE(verified_species, species) AS species, "
-            "confidence, image_path, frames FROM sightings "
-            "WHERE COALESCE(rejected, 0) = 0 ORDER BY ts DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        q = ("SELECT id, ts, last_ts, COALESCE(verified_species, species) AS species, "
+             "confidence, image_path, frames FROM sightings WHERE COALESCE(rejected, 0) = 0")
+        params: list = []
+        if source:
+            q += " AND source = ?"
+            params.append(source)
+        q += " ORDER BY ts DESC LIMIT ?"
+        params.append(limit)
+        rows = self._conn.execute(q, params).fetchall()
         return [dict(r) for r in rows]
 
-    def day_hours(self, day: date) -> dict:
+    def day_hours(self, day: date, source: str | None = None) -> dict:
         """Per-species hourly counts for one day (0..23), for the day-drill view."""
         start = datetime.combine(day, datetime.min.time())
         end = start + timedelta(days=1)
-        rows = self._conn.execute(
-            "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence "
-            "FROM sightings WHERE ts >= ? AND ts < ? AND COALESCE(rejected, 0) = 0 ORDER BY ts ASC",
-            (start.isoformat(), end.isoformat()),
-        ).fetchall()
+        q = ("SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence "
+             "FROM sightings WHERE ts >= ? AND ts < ? AND COALESCE(rejected, 0) = 0")
+        params: list = [start.isoformat(), end.isoformat()]
+        if source:
+            q += " AND source = ?"
+            params.append(source)
+        q += " ORDER BY ts ASC"
+        rows = self._conn.execute(q, params).fetchall()
 
         agg: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
         for r in rows:
@@ -202,14 +208,17 @@ class Database:
         species_payload.sort(key=lambda s: s["total"], reverse=True)
         return {"date": day.isoformat(), "hours": list(range(24)), "species": species_payload}
 
-    def week_grid(self, week_start: date) -> dict:
+    def week_grid(self, week_start: date, source: str | None = None) -> dict:
         """Build the weekly grid payload (Sun..Sat). Each visit counts once."""
         week_end = week_start + timedelta(days=7)
-        rows = self._conn.execute(
-            "SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence FROM sightings"
-            " WHERE ts >= ? AND ts < ? AND COALESCE(rejected, 0) = 0 ORDER BY ts ASC",
-            (week_start.isoformat(), week_end.isoformat()),
-        ).fetchall()
+        q = ("SELECT ts, COALESCE(verified_species, species) AS species, image_path, confidence "
+             "FROM sightings WHERE ts >= ? AND ts < ? AND COALESCE(rejected, 0) = 0")
+        params: list = [week_start.isoformat(), week_end.isoformat()]
+        if source:
+            q += " AND source = ?"
+            params.append(source)
+        q += " ORDER BY ts ASC"
+        rows = self._conn.execute(q, params).fetchall()
 
         agg: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
         for r in rows:

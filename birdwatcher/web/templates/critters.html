@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BirdWatcher 🐦</title>
+  <title>CritterWatch 🦝</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1>🐦 BirdWatcher</h1>
+      <h1>🦝 CritterWatch</h1>
       <div class="region" id="region">Loading…</div>
     </div>
     <div class="right">
@@ -19,8 +19,7 @@
         <button class="iconbtn" id="next" title="Next week">›</button>
         <button class="iconbtn" id="today" title="This week" style="width:auto;padding:0 10px;font-size:.8rem">today</button>
       </div>
-      <a class="iconbtn" href="/critters" title="Creek cam — CritterWatch" style="width:auto;padding:0 10px;font-size:.8rem;text-decoration:none">🦝 critters</a>
-      <a class="iconbtn" id="birdnet-link" href="#" target="_blank" title="Listen — open BirdNET-Go" style="width:auto;padding:0 10px;font-size:.8rem;text-decoration:none">🔊 listen</a>
+      <a class="iconbtn" href="/" title="Feeder cam — BirdWatcher" style="width:auto;padding:0 10px;font-size:.8rem;text-decoration:none">🐦 birds</a>
       <a class="iconbtn" href="/review" title="Review &amp; fix IDs" style="width:auto;padding:0 10px;font-size:.8rem;text-decoration:none">✎ review</a>
       <button class="iconbtn" id="theme" title="Toggle light / dark">◐</button>
     </div>
@@ -39,13 +38,13 @@
       <span id="legend-note"></span>
       <span class="scale">less
         <span class="sw" style="background:var(--cell-empty)"></span>
-        <span class="sw" style="background:#B5D4F4"></span>
-        <span class="sw" style="background:#85B7EB"></span>
-        <span class="sw" style="background:#378ADD"></span>
-        <span class="sw" style="background:#185FA5"></span>more
+        <span class="sw" style="background:#F0D2A0"></span>
+        <span class="sw" style="background:#E0A64E"></span>
+        <span class="sw" style="background:#B9781F"></span>
+        <span class="sw" style="background:#8A5117"></span>more
       </span>
     </div>
-    <p id="empty" class="empty" hidden>No birds yet this week — the feeder's listening.</p>
+    <p id="empty" class="empty" hidden>No wildlife yet this week — the creek cam's watching.</p>
   </main>
 
   <section class="nowcard" id="nowcard" hidden>
@@ -61,6 +60,7 @@
     </div>
   </div>
 
+  <script>window.BW_MODE = "creek";</script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
