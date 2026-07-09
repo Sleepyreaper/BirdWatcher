@@ -5,6 +5,17 @@ from datetime import datetime
 from birdwatcher.database import Database, week_start_for
 
 
+def test_add_visit_stores_source(tmp_path):
+    """Each sighting is tagged with its camera; defaults to 'feeder'."""
+    db = Database(tmp_path / "bw.db")
+    db.add_visit("Raccoon", 0.8, image_path="r.jpg", source="creek")
+    db.add_visit("Northern Cardinal", 0.9, image_path="c.jpg")
+    rows = db._conn.execute("SELECT species, source FROM sightings ORDER BY id").fetchall()
+    assert rows[0]["source"] == "creek"
+    assert rows[1]["source"] == "feeder"
+    db.close()
+
+
 def test_week_grid_best_and_latest_differ(tmp_path):
     """thumb = highest-confidence crop; latest = most recent crop."""
     db = Database(tmp_path / "bw.db")

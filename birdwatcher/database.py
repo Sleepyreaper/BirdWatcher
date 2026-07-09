@@ -38,7 +38,8 @@ CREATE INDEX IF NOT EXISTS idx_library_species ON library_examples(species);
 
 # Columns added after the first release; applied to existing DBs at startup.
 _MIGRATIONS = [("last_ts", "TEXT"), ("frames", "INTEGER DEFAULT 1"),
-               ("verified_species", "TEXT"), ("rejected", "INTEGER DEFAULT 0")]
+               ("verified_species", "TEXT"), ("rejected", "INTEGER DEFAULT 0"),
+               ("source", "TEXT DEFAULT 'feeder'")]
 
 
 class Database:
@@ -78,13 +79,14 @@ class Database:
         first_ts: datetime | None = None,
         last_ts: datetime | None = None,
         frames: int = 1,
+        source: str = "feeder",
     ) -> int:
         first_ts = first_ts or datetime.now()
         last_ts = last_ts or first_ts
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO sightings (ts, species, confidence, image_path, detector_conf,"
-                " last_ts, frames) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                " last_ts, frames, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     first_ts.isoformat(timespec="seconds"),
                     species,
@@ -93,6 +95,7 @@ class Database:
                     detector_conf,
                     last_ts.isoformat(timespec="seconds"),
                     frames,
+                    source,
                 ),
             )
             self._conn.commit()

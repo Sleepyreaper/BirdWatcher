@@ -136,6 +136,7 @@ class Pipeline:
                     first_ts=v.first_seen,
                     last_ts=v.last_seen,
                     frames=v.frames,
+                    source=self.cfg.camera.source,
                 )
         except Exception as e:
             print(f"[pipeline] record failed: {e}")

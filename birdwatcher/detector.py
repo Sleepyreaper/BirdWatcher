@@ -1,7 +1,11 @@
-"""Bird detection via Ultralytics YOLO.
+"""Object detection via Ultralytics YOLO — the "something's there, crop it" gate.
 
-We only care about the COCO `bird` class (id 14). The detector answers
-"is there a bird, and where?" and returns a padded crop for the classifier.
+Which classes count is configurable (`detector.classes`): the feeder cam wants
+just `bird`, while a wildlife/creek cam wants the broad animal set. The crop is
+handed to the classifier (BioCLIP), which does the actual species ID — so the
+detector only has to notice *an animal*, not name it. Class names are resolved
+against whatever model is loaded, so this works for YOLO-COCO today and drops in
+a MegaDetector (`animal`/`person`/`vehicle`) later with only a config change.
 """
 
 from __future__ import annotations
@@ -15,8 +19,6 @@ except ImportError:  # pragma: no cover
 
 from .config import DetectorConfig
 
-COCO_BIRD_CLASS = 14
-
 
 @dataclass
 class Detection:
@@ -25,18 +27,27 @@ class Detection:
     crop: "object"  # np.ndarray (BGR)
 
 
-class BirdDetector:
+class Detector:
     def __init__(self, cfg: DetectorConfig):
         if YOLO is None:
             raise RuntimeError("ultralytics not installed; pip install ultralytics")
         self.cfg = cfg
         self.model = YOLO(cfg.model)
+        # Resolve the configured class NAMES to this model's indices, so the same
+        # config works across models with different label maps. Unknown names are
+        # dropped; if none resolve, accept everything (single-class models).
+        names = {str(n).lower(): i for i, n in self.model.names.items()}
+        wanted = [c.lower() for c in (cfg.classes or [])]
+        ids = [names[c] for c in wanted if c in names]
+        self.class_ids = ids or None
+        if wanted and not ids:
+            print(f"[detector] none of {cfg.classes} in model labels; accepting all classes")
 
     def detect(self, frame) -> list[Detection]:
-        """Return bird detections (highest confidence first)."""
+        """Return detections for the configured classes (highest confidence first)."""
         h, w = frame.shape[:2]
         results = self.model.predict(
-            frame, classes=[COCO_BIRD_CLASS], conf=self.cfg.min_confidence, verbose=False
+            frame, classes=self.class_ids, conf=self.cfg.min_confidence, verbose=False
         )
         out: list[Detection] = []
         for res in results:
@@ -52,3 +63,7 @@ class BirdDetector:
                 out.append(Detection(conf, (x1, y1, x2, y2), crop))
         out.sort(key=lambda d: d.confidence, reverse=True)
         return out
+
+
+# Back-compat alias (pipeline + tests import BirdDetector).
+BirdDetector = Detector

@@ -1,0 +1,38 @@
+# Config for the SECOND watcher — the creek / wildlife (Reolink Duo 3) cam.
+# Copy to /mnt/birddata/config.creek.yaml on the server.
+# Same DB + captures as the feeder cam; only the camera, detector classes, and
+# source tag differ. Safe to commit — no secrets (the RTSP creds live in go2rtc).
+
+camera:
+  # go2rtc restreams the Duo 3; use its low-res sub feed for detection (the 4K
+  # panorama is 7680x2160 — too heavy to software-decode). Upgrade to a GPU
+  # transcoded feed later for more detail.
+  rtsp_url: "rtsp://go2rtc:8554/creekcam_sub"
+  use_tcp: true
+  source: "creek"          # tags every sighting from this cam
+
+paths:
+  db: "/data/birdwatcher.db"        # SAME db as the feeder cam
+  captures: "/data/captures"
+
+classifier:
+  backend: "bioclip"
+  bioclip_model: "hf-hub:imageomics/bioclip-2"
+  min_confidence: 0.25
+
+detector:
+  model: "yolov8n.pt"
+  min_confidence: 0.35
+  # Broad animal set — BioCLIP does the real ID on the crop, so we just need to
+  # notice an animal. (Swap model to MegaDetector + classes ["animal"] later to
+  # also catch raccoon/opossum, which COCO doesn't know.)
+  classes: ["bird", "cat", "dog", "horse", "sheep", "cow", "bear"]
+
+pipeline:
+  # Wildlife/panorama crops are lower-res than the feeder cam, so mammals score
+  # a bit lower — a gentler floor than the feeder's 0.70 while we dial things in.
+  min_confidence: 0.50
+
+# No audio integration on this watcher (BirdNET-Go handles the feeder cam's mic).
+weather:
+  enabled: false

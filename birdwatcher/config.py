@@ -30,6 +30,9 @@ class CameraConfig:
     use_tcp: bool = True
     # Seconds to wait before reconnecting after the stream drops.
     reconnect_delay: float = 5.0
+    # Which camera this watcher is — tags every sighting so the dashboard can
+    # tell the feeder cam from the creek/wildlife cam. Override per watcher.
+    source: str = "feeder"
 
 
 @dataclass
@@ -46,11 +49,16 @@ class MotionConfig:
 @dataclass
 class DetectorConfig:
     # Ultralytics model. yolov8n.pt is the small/fast default; auto-downloads.
+    # Point at MegaDetector weights for a proper wildlife cam.
     model: str = "yolov8n.pt"
-    # Minimum YOLO confidence to accept a "bird" detection.
+    # Minimum YOLO confidence to accept a detection.
     min_confidence: float = 0.35
-    # Pad the bird bounding box by this fraction before cropping (context helps ID).
+    # Pad the bounding box by this fraction before cropping (context helps ID).
     crop_pad_frac: float = 0.15
+    # Class NAMES to accept (resolved against the loaded model's labels). Feeder
+    # cam = ["bird"]; wildlife cam = the broad animal set. BioCLIP does the real
+    # species ID on the crop, so the detector just has to spot an animal.
+    classes: list[str] = field(default_factory=lambda: ["bird"])
 
 
 @dataclass

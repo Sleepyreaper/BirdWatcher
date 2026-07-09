@@ -53,6 +53,30 @@ services:
       - /etc/localtime:/etc/localtime:ro
     user: "1000:1000"   # sleepy
 
+  # ── Creek / wildlife watcher (2nd camera) ──────────────────────────────────
+  # Same image, second config: reads the Duo 3 via go2rtc, detects the broad
+  # animal set (not just birds), tags sightings source=creek. Writes to the same
+  # DB, so wildlife shows up in the dashboard alongside the feeder.
+  birdwatcher-watch-creek:
+    image: birdwatcher:latest
+    container_name: SleepyBirdsWatchCreek
+    restart: unless-stopped
+    runtime: nvidia
+    depends_on:
+      - go2rtc
+      - birdwatcher
+    command: ["python3", "run.py", "watch"]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      - TZ=America/New_York
+      - BW_CONFIG=/data/config.creek.yaml
+    volumes:
+      - /mnt/birddata:/data
+      - /mnt/birddata/species_catalog.json:/app/data/species_catalog.json
+      - /etc/localtime:/etc/localtime:ro
+    user: "1000:1000"   # sleepy
+
   # ── BirdNET-Go (audio) ────────────────────────────────────────────────────
   birdnet-go:
     image: ghcr.io/tphakala/birdnet-go:nightly
