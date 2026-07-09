@@ -21,7 +21,10 @@ classifier:
   min_confidence: 0.25   # below this a bird is labeled "Unknown bird" (if kept at all)
 
 detector:
-  model: "yolov8n.pt"
+  # Absolute path on the data volume — a bare filename makes YOLO try to
+  # download into /app, which the uid-1000 container can't write.
+  # First run: `mkdir -p /mnt/birddata/models` (YOLO downloads the weights there).
+  model: "/data/models/yolov8n.pt"
   min_confidence: 0.35
 
 pipeline:

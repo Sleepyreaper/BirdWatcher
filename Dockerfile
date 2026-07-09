@@ -29,6 +29,10 @@ COPY . .
 
 # BioCLIP model cache lands on the data volume, not in the image layer.
 ENV HF_HOME=/data/hf-cache
+# Point tool caches at /tmp (the uid-1000 container can't write to /.config),
+# silencing the Ultralytics + matplotlib "not writable" warnings.
+ENV YOLO_CONFIG_DIR=/tmp/Ultralytics \
+    MPLCONFIGDIR=/tmp/matplotlib
 
 EXPOSE 8080
 CMD ["python3", "-m", "birdwatcher.web.app"]
