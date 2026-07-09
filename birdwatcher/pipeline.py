@@ -15,7 +15,7 @@ from datetime import datetime
 from .capture import RTSPCamera
 from .classifier import StubClassifier, build_classifier
 from .config import Config
-from .database import Database
+from .database import Database, PERSON_SPECIES
 from .detector import BirdDetector
 
 Box = tuple[int, int, int, int]
@@ -110,10 +110,10 @@ class Pipeline:
     def _record(self, v: _Visit) -> None:
         if v.frames < self.cfg.pipeline.min_visit_frames:
             return
-        # People bypass BioCLIP entirely — record as "Person" (never toss; security
-        # matters), using the detector's confidence.
+        # People bypass BioCLIP entirely — recorded as "Homo sapiens" (never
+        # toss; security matters), using the detector's confidence.
         if v.best_label == "person":
-            species, conf = "Person", v.best_det_conf
+            species, conf = PERSON_SPECIES, v.best_det_conf
         else:
             try:
                 result = self.classifier.classify(v.best_crop)

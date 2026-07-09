@@ -36,6 +36,10 @@ CREATE TABLE IF NOT EXISTS library_examples (
 CREATE INDEX IF NOT EXISTS idx_library_species ON library_examples(species);
 """
 
+# Sentinel species for a detected human — recorded straight from the detector
+# (no BioCLIP). The web files it under "People" and gives it its own dossier.
+PERSON_SPECIES = "Homo sapiens"
+
 # Columns added after the first release; applied to existing DBs at startup.
 _MIGRATIONS = [("last_ts", "TEXT"), ("frames", "INTEGER DEFAULT 1"),
                ("verified_species", "TEXT"), ("rejected", "INTEGER DEFAULT 0"),

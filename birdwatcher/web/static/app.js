@@ -82,7 +82,7 @@ function render(d) {
 
   const people = d.people || [];
   if (people.length) {
-    g.append(el("div", "divider", `<span class="person">👤</span> people · caught on camera`));
+    g.append(el("div", "divider", `<span class="person">👤</span> <i>Homo sapiens</i> · the local bipeds, caught on camera`));
     people.forEach((sp) => g.append(personRow(sp, d, today)));
   }
 
@@ -142,8 +142,8 @@ function personRow(sp, d, today) {
   const row = el("div", "row srow");
   const a = el("a", "species",
     `<div class="av-badge" style="background:#3E4757;color:#fff;font-size:18px">👤</div>` +
-    `<div style="min-width:0"><div class="nm">${sp.name}</div>` +
-    `<div class="sub">${sp.total} sighting${sp.total === 1 ? "" : "s"}</div></div>`);
+    `<div style="min-width:0"><div class="nm"><i>${sp.name}</i></div>` +
+    `<div class="sub">${sp.total} sighting${sp.total === 1 ? "" : "s"} · the one who fills the feeders</div></div>`);
   a.href = `/species/${encodeURIComponent(sp.name)}`;
   row.append(a);
   sp.counts.forEach((c, i) => {

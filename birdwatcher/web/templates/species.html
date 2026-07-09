@@ -16,6 +16,7 @@
       padding: 3px 9px; border-radius: 20px; font-weight: 700; }
     .kind.bird { background: rgba(63,184,132,.16); color: var(--accent); }
     .kind.critter { background: rgba(201,138,46,.18); color: #c98a2e; }
+    .kind.person { background: rgba(138,147,163,.18); color: #8a93a3; }
     .sp-listen { margin-left: 8px; font-size: .72rem; text-decoration: none; color: var(--accent); }
 
     .sect { font-size: .72rem; text-transform: uppercase; letter-spacing: .6px; color: var(--text-muted); font-weight: 700; margin: 26px 0 12px; }
@@ -23,6 +24,7 @@
     .about { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
       border-radius: 10px; padding: 14px 16px; font-size: .9rem; line-height: 1.55; color: var(--text-soft); margin: 0; }
     .about.critter { border-left-color: #c98a2e; }
+    .about.person { border-left-color: #8a93a3; }
     .about a { color: var(--accent); text-decoration: none; white-space: nowrap; }
     .about a:hover { text-decoration: underline; }
 
@@ -30,6 +32,7 @@
     .hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; height: 120px; }
     .hbar { background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; position: relative; transition: filter .1s; }
     .hbar.critter { background: #c98a2e; }
+    .hbar.person { background: #8a93a3; }
     .hbar:hover { filter: brightness(1.15); }
     .hbar .n { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: .6rem; color: var(--text-soft); }
     .hlabels { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; margin-top: 5px; }
@@ -103,19 +106,21 @@
       const d = await (await fetch(`/api/species/${encodeURIComponent(NAME)}`)).json();
       document.getElementById("region").textContent = d.region?.name || "";
       document.title = `${d.name} · BirdWatcher`;
-      const critter = d.kind === "critter";
+      const kind = d.kind || "bird";                   // blue=bird, amber=critter, slate=person
+      const badge = { bird: "🐦 bird", critter: "🦝 critter", person: "👤 human" }[kind] || "🐦 bird";
 
       // hero
       const hero = document.getElementById("hero");
       const pic = d.reference
         ? `<img src="${d.reference}" alt="">`
-        : `<div class="noimg">${initials(d.name)}</div>`;
+        : `<div class="noimg">${kind === "person" ? "👤" : initials(d.name)}</div>`;
       const listen = (d.audio_on && d.heard_total)
         ? `<a class="sp-listen" href="http://${location.hostname}:8090" target="_blank">🔊 heard ${d.heard_total}× · listen</a>` : "";
+      const h1 = kind === "person" ? `<h1><i>${d.name}</i></h1>` : `<h1>${d.name}</h1>`;
       hero.innerHTML = `${pic}<div>
-        <h1>${d.name}</h1>
+        ${h1}
         <div class="sci">${[d.scientific, d.family].filter(Boolean).join(" · ")}</div>
-        <span class="kind ${critter?"critter":"bird"}">${critter?"🦝 critter":"🐦 bird"}</span>${listen}
+        <span class="kind ${kind}">${badge}</span>${listen}
       </div>`;
 
       // stats
@@ -132,7 +137,7 @@
       if (d.facts && d.facts.extract) {
         document.getElementById("about-label").hidden = false;
         const a = document.getElementById("about");
-        a.className = "about" + (critter ? " critter" : "");
+        a.className = "about" + (kind !== "bird" ? " " + kind : "");
         a.hidden = false;
         const link = d.facts.url ? ` <a href="${d.facts.url}" target="_blank">Wikipedia →</a>` : "";
         a.innerHTML = d.facts.extract + link;
@@ -144,7 +149,7 @@
       const hbox = document.getElementById("hours"), lbox = document.getElementById("hlabels");
       hours.forEach((n,h) => {
         const bar = document.createElement("div");
-        bar.className = "hbar" + (critter?" critter":"");
+        bar.className = "hbar" + (kind !== "bird" ? " " + kind : "");
         bar.style.height = (n ? Math.max(4, (n/max)*100) : 0) + "%";
         bar.title = `${hourLabel(h)} · ${n} visit(s)`;
         if (n) bar.innerHTML = `<span class="n">${n}</span>`;

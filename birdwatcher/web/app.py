@@ -22,7 +22,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from ..birdnetgo import BirdnetGoReader
 from ..config import PROJECT_ROOT, Config, load_config
-from ..database import Database, week_start_for
+from ..database import PERSON_SPECIES, Database, week_start_for
 from ..weather import hourly_weather
 
 DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -300,7 +300,11 @@ def create_app(cfg: Config | None = None) -> Flask:
     @app.route("/api/species/<path:name>")
     def api_species(name):
         detail = get_db().species_detail(name)
-        if name in critters:
+        if name == PERSON_SPECIES:
+            sci = None   # the name already IS the binomial
+            meta = {"scientific": None, "family": "Hominidae · order Primates",
+                    "reference": None, "kind": "person"}
+        elif name in critters:
             sci = critters[name].get("scientific_name")
             meta = {"scientific": sci, "family": None,
                     "reference": _sci_ref(sci) if sci else None, "kind": "critter"}
@@ -342,7 +346,7 @@ def create_app(cfg: Config | None = None) -> Flask:
         critter_day = [0] * 7
         people_day = [0] * 7
         for sp in grid["species"]:
-            if sp["name"] == "Person":
+            if sp["name"] == PERSON_SPECIES:
                 people_rows.append({**sp, "scientific": None, "reference": None})
                 for i, c in enumerate(sp["counts"]):
                     people_day[i] += c
