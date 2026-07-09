@@ -75,6 +75,16 @@ def test_low_confidence_visit_is_tossed(pipe):
     assert pipe.db.rows == []
 
 
+def test_person_recorded_without_classifier(pipe):
+    """A person is tagged 'Person' via the detector label — BioCLIP never runs."""
+    pipe.classifier = _BoomClassifier()   # would raise if called
+    ts = datetime(2026, 6, 29, 8, 0, 0)
+    visit = _Visit((0, 0, 10, 10), ts, ts, 3, 1.0, object(), 0.8, "person")
+    pipe._record(visit)
+    assert len(pipe.db.rows) == 1
+    assert pipe.db.rows[0]["species"] == "Person"
+
+
 def test_record_save_failure_does_not_raise(pipe, monkeypatch):
     monkeypatch.setattr(pipe, "_save_crop", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk")))
     pipe._record(_visit())

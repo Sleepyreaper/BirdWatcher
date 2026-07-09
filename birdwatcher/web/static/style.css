@@ -113,6 +113,7 @@ a.species:hover .nm { color: var(--accent); text-decoration: underline; }
 .divider::before { flex: 0 0 0; }
 .divider .sound { color: var(--accent); }
 .divider .critter { color: #c98a2e; }
+.divider .person { color: #8a93a3; }
 
 .legend { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; font-size: .68rem; color: var(--text-muted); flex-wrap: wrap; padding: 0 4px; }
 .legend .scale { display: flex; align-items: center; gap: 5px; }

@@ -25,6 +25,7 @@ class Detection:
     confidence: float
     box: tuple[int, int, int, int]  # x1, y1, x2, y2
     crop: "object"  # np.ndarray (BGR)
+    label: str = ""  # model class name, e.g. "bird", "person", "cow"
 
 
 class Detector:
@@ -53,6 +54,7 @@ class Detector:
         for res in results:
             for b in res.boxes:
                 conf = float(b.conf[0])
+                label = str(self.model.names.get(int(b.cls[0]), "")).lower()
                 x1, y1, x2, y2 = (int(v) for v in b.xyxy[0])
                 # pad the box for context, clamped to frame
                 pad_x = int((x2 - x1) * self.cfg.crop_pad_frac)
@@ -60,7 +62,7 @@ class Detector:
                 cx1, cy1 = max(0, x1 - pad_x), max(0, y1 - pad_y)
                 cx2, cy2 = min(w, x2 + pad_x), min(h, y2 + pad_y)
                 crop = frame[cy1:cy2, cx1:cx2].copy()
-                out.append(Detection(conf, (x1, y1, x2, y2), crop))
+                out.append(Detection(conf, (x1, y1, x2, y2), crop, label))
         out.sort(key=lambda d: d.confidence, reverse=True)
         return out
 

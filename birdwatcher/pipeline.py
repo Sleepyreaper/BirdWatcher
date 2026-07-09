@@ -51,6 +51,7 @@ class _Visit:
     best_score: float
     best_crop: object
     best_det_conf: float
+    best_label: str = ""   # detector class of the best frame ("bird", "person", …)
 
 
 class Pipeline:
@@ -85,15 +86,15 @@ class Pipeline:
             vid = self._match(det.box)
             if vid is None:
                 self._open[self._next_id] = _Visit(
-                    det.box, now, now, 1, score, det.crop, det.confidence
+                    det.box, now, now, 1, score, det.crop, det.confidence, det.label
                 )
                 self._next_id += 1
             else:
                 v = self._open[vid]
                 v.box, v.last_seen, v.frames = det.box, now, v.frames + 1
                 if score > v.best_score:
-                    v.best_score, v.best_crop, v.best_det_conf = (
-                        score, det.crop, det.confidence,
+                    v.best_score, v.best_crop, v.best_det_conf, v.best_label = (
+                        score, det.crop, det.confidence, det.label,
                     )
         self._reap(now)
 
@@ -109,28 +110,34 @@ class Pipeline:
     def _record(self, v: _Visit) -> None:
         if v.frames < self.cfg.pipeline.min_visit_frames:
             return
-        try:
-            result = self.classifier.classify(v.best_crop)
-        except Exception as e:
-            print(f"[pipeline] classify failed: {e}")
-            return
-        # Toss weak matches outright (squirrel tail scored 0.4 as a titmouse, etc.)
-        if result.confidence < self.cfg.pipeline.min_confidence:
-            print(f"[pipeline] {v.first_seen:%H:%M:%S}  tossed {result.species} "
-                  f"({result.confidence:.2f} < {self.cfg.pipeline.min_confidence:.2f}) "
-                  f"— not a clean match")
-            return
-        species = result.species
-        if result.confidence < self.cfg.classifier.min_confidence:
-            species = "Unknown bird"
+        # People bypass BioCLIP entirely — record as "Person" (never toss; security
+        # matters), using the detector's confidence.
+        if v.best_label == "person":
+            species, conf = "Person", v.best_det_conf
+        else:
+            try:
+                result = self.classifier.classify(v.best_crop)
+            except Exception as e:
+                print(f"[pipeline] classify failed: {e}")
+                return
+            # Toss weak matches outright (squirrel tail scored 0.4 as a titmouse, etc.)
+            if result.confidence < self.cfg.pipeline.min_confidence:
+                print(f"[pipeline] {v.first_seen:%H:%M:%S}  tossed {result.species} "
+                      f"({result.confidence:.2f} < {self.cfg.pipeline.min_confidence:.2f}) "
+                      f"— not a clean match")
+                return
+            species = result.species
+            if result.confidence < self.cfg.classifier.min_confidence:
+                species = "Unknown bird"
+            conf = result.confidence
         try:
             if self.cfg.pipeline.ingest_url:
-                self._post_visit(v, species, result.confidence)
+                self._post_visit(v, species, conf)
             else:
                 rel = self._save_crop(v.best_crop, species, v.first_seen)
                 self.db.add_visit(
                     species=species,
-                    confidence=result.confidence,
+                    confidence=conf,
                     image_path=rel,
                     detector_conf=v.best_det_conf,
                     first_ts=v.first_seen,
@@ -143,7 +150,7 @@ class Pipeline:
             return
         dur = (v.last_seen - v.first_seen).total_seconds()
         print(f"[pipeline] {v.first_seen:%H:%M:%S}  visit: {species}  "
-              f"frames={v.frames} dur={dur:.0f}s id={result.confidence:.2f}")
+              f"frames={v.frames} dur={dur:.0f}s id={conf:.2f}")
 
     def _save_crop(self, crop, species: str, ts: datetime) -> str | None:
         if not self.cfg.pipeline.save_crops:

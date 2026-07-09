@@ -23,10 +23,10 @@ classifier:
 detector:
   model: "yolov8n.pt"
   min_confidence: 0.35
-  # Broad animal set — BioCLIP does the real ID on the crop, so we just need to
-  # notice an animal. (Swap model to MegaDetector + classes ["animal"] later to
-  # also catch raccoon/opossum, which COCO doesn't know.)
-  classes: ["bird", "cat", "dog", "horse", "sheep", "cow", "bear"]
+  # Broad animal set + person — BioCLIP does the real ID on animal crops, while
+  # "person" is recorded directly as "Person" (skips BioCLIP). Swap the model to
+  # MegaDetector + classes ["animal","person"] later to also catch raccoon/opossum.
+  classes: ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
 
 pipeline:
   # Wildlife/panorama crops are lower-res than the feeder cam, so mammals score

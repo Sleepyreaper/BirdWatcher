@@ -337,10 +337,16 @@ def create_app(cfg: Config | None = None) -> Flask:
             prev = heard.get(common)
             heard[common] = [a + b for a, b in zip(prev, counts)] if prev else list(counts)
 
-        seen, critter_rows, seen_names = [], [], set()
+        seen, critter_rows, people_rows, seen_names = [], [], [], set()
         per_day = [0] * 7
         critter_day = [0] * 7
+        people_day = [0] * 7
         for sp in grid["species"]:
+            if sp["name"] == "Person":
+                people_rows.append({**sp, "scientific": None, "reference": None})
+                for i, c in enumerate(sp["counts"]):
+                    people_day[i] += c
+                continue
             if sp["name"] in critters:
                 cmeta = critters[sp["name"]]
                 sci = cmeta.get("scientific_name")
@@ -398,6 +404,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             "is_current": week_start == week_start_for(date.today()),
             "seen": seen,
             "critters": critter_rows,
+            "people": people_rows,
             "heard_only": heard_only,
             "catalog": catalog_list,
             "audio_on": birdnet.available(),
@@ -407,6 +414,7 @@ def create_app(cfg: Config | None = None) -> Flask:
                 "species_heard": len(heard_all),
                 "critters": len(critter_rows),
                 "critter_visits": sum(critter_day),
+                "people_visits": sum(people_day),
                 "on_list": len(catalog_list),
                 "busiest_day": DAYS[per_day.index(max(per_day))] if total else "—",
             },

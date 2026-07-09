@@ -76,11 +76,14 @@ class BioClipClassifier(SpeciesClassifier):
             handle = "hf-hub:imageomics/bioclip"
             model, _, preprocess = open_clip.create_model_and_transforms(handle)
             tokenizer = open_clip.get_tokenizer(handle)
-        print(f"[classifier] bioclip model: {handle}")
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[classifier] bioclip model: {handle} on {self.device}")
         model.eval()
+        model.to(self.device)
         self.model, self.preprocess = model, preprocess
         with torch.no_grad():
-            txt = model.encode_text(tokenizer([f"a photo of {n}." for n in self._names]))
+            tokens = tokenizer([f"a photo of {n}." for n in self._names]).to(self.device)
+            txt = model.encode_text(tokens)
             txt /= txt.norm(dim=-1, keepdim=True)
         self._txt = txt
 
@@ -91,7 +94,7 @@ class BioClipClassifier(SpeciesClassifier):
         if crop is None or crop.size == 0:
             return SpeciesResult("Unknown bird", 0.0)
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-        img = self.preprocess(Image.fromarray(rgb)).unsqueeze(0)
+        img = self.preprocess(Image.fromarray(rgb)).unsqueeze(0).to(self.device)
         with self.torch.no_grad():
             feat = self.model.encode_image(img)
             feat /= feat.norm(dim=-1, keepdim=True)
