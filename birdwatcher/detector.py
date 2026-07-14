@@ -47,9 +47,10 @@ class Detector:
     def detect(self, frame) -> list[Detection]:
         """Return detections for the configured classes (highest confidence first)."""
         h, w = frame.shape[:2]
-        results = self.model.predict(
-            frame, classes=self.class_ids, conf=self.cfg.min_confidence, verbose=False
-        )
+        kw = {"classes": self.class_ids, "conf": self.cfg.min_confidence, "verbose": False}
+        if getattr(self.cfg, "imgsz", 0):
+            kw["imgsz"] = self.cfg.imgsz   # e.g. 1280 for MegaDetector -1280 models
+        results = self.model.predict(frame, **kw)
         out: list[Detection] = []
         for res in results:
             for b in res.boxes:

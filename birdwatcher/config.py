@@ -59,6 +59,9 @@ class DetectorConfig:
     # cam = ["bird"]; wildlife cam = the broad animal set. BioCLIP does the real
     # species ID on the crop, so the detector just has to spot an animal.
     classes: list[str] = field(default_factory=lambda: ["bird"])
+    # Inference image size. 0 = model default (~640). MegaDetector's -1280
+    # variants want 1280 to catch small/distant animals in a wide scene.
+    imgsz: int = 0
 
 
 @dataclass
