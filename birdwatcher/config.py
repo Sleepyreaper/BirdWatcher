@@ -74,6 +74,14 @@ class ClassifierConfig:
     # BioCLIP model handle (open_clip). bioclip-2 is ~18% more accurate than v1;
     # falls back to v1 automatically if it can't be loaded.
     bioclip_model: str = "hf-hub:imageomics/bioclip-2"
+    # Few-shot: blend the reference library into classification. For each species
+    # with verified crops in <library_dir>/<slug>/, its class embedding becomes
+    # the mean of those crops instead of a generic text prompt — tuning IDs to
+    # YOUR actual birds. Species with no crops keep the zero-shot text embedding.
+    # Rebuild happens at watcher startup, so restart the watcher after a review
+    # session to pick up new examples.
+    use_library: bool = True
+    library_dir: str = ""   # set by the pipeline from paths (data/library)
 
 
 @dataclass

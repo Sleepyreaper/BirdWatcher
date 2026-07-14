@@ -87,6 +87,50 @@ class BioClipClassifier(SpeciesClassifier):
             txt /= txt.norm(dim=-1, keepdim=True)
         self._txt = txt
 
+        # Few-shot: replace a species' text embedding with the mean of its
+        # verified reference crops (if any). Blends zero-shot + your library.
+        self._class_emb = txt
+        if cfg.use_library and cfg.library_dir:
+            self._class_emb = self._build_prototypes(cfg.library_dir)
+
+    def _build_prototypes(self, library_dir: str):
+        """Per-species class embeddings: mean of library crops where available,
+        else the zero-shot text embedding. Any failure falls back to text-only."""
+        from pathlib import Path
+
+        import cv2
+        from PIL import Image
+
+        lib = Path(library_dir)
+        if not lib.is_dir():
+            return self._txt
+        emb = self._txt.clone()
+        built = 0
+        try:
+            for i, name in enumerate(self._names):
+                slug = name.lower().replace(" ", "-").replace("/", "-")
+                crops = []
+                for f in sorted((lib / slug).glob("*.jpg")):
+                    img = cv2.imread(str(f))
+                    if img is None:
+                        continue
+                    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    crops.append(self.preprocess(Image.fromarray(rgb)))
+                if not crops:
+                    continue
+                with self.torch.no_grad():
+                    feats = self.model.encode_image(self.torch.stack(crops).to(self.device))
+                    feats /= feats.norm(dim=-1, keepdim=True)
+                    proto = feats.mean(dim=0)
+                    proto /= proto.norm()
+                emb[i] = proto
+                built += 1
+        except Exception as e:
+            print(f"[classifier] few-shot prototype build failed ({e}); text-only")
+            return self._txt
+        print(f"[classifier] few-shot: {built} species tuned from the reference library")
+        return emb
+
     def classify(self, crop) -> SpeciesResult:
         import cv2
         from PIL import Image
@@ -98,7 +142,7 @@ class BioClipClassifier(SpeciesClassifier):
         with self.torch.no_grad():
             feat = self.model.encode_image(img)
             feat /= feat.norm(dim=-1, keepdim=True)
-            probs = (100.0 * feat @ self._txt.T).softmax(dim=-1)[0]
+            probs = (100.0 * feat @ self._class_emb.T).softmax(dim=-1)[0]
         idx = int(probs.argmax())
         return SpeciesResult(self._names[idx], float(probs[idx]))
 

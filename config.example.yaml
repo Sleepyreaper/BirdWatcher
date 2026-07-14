@@ -19,12 +19,16 @@ classifier:
   backend: "bioclip"
   bioclip_model: "hf-hub:imageomics/bioclip-2"
   min_confidence: 0.25   # below this a bird is labeled "Unknown bird" (if kept at all)
+  # Few-shot: blend verified crops from /review into classification. Tunes IDs
+  # to your actual birds; restart the watcher after a review session to reload.
+  use_library: true
 
 detector:
   # Absolute path on the data volume — a bare filename makes YOLO try to
   # download into /app, which the uid-1000 container can't write.
-  # First run: `mkdir -p /mnt/birddata/models` (YOLO downloads the weights there).
-  model: "/data/models/yolov8n.pt"
+  # yolov8x (extra-large) for a good GPU like the 3090 — tighter boxes + catches
+  # more than the tiny yolov8n. Use yolov8n on CPU/low-power boxes.
+  model: "/data/models/yolov8x.pt"
   min_confidence: 0.35
 
 pipeline:

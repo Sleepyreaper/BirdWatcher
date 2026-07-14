@@ -60,6 +60,9 @@ class Pipeline:
         self.db = Database(cfg.paths.db_path())
         self.camera = RTSPCamera(cfg.camera, cfg.motion)
         self.detector = BirdDetector(cfg.detector)
+        # Point the classifier at the reference library (few-shot prototypes).
+        if not cfg.classifier.library_dir:
+            cfg.classifier.library_dir = str(cfg.paths.captures_path().parent / "library")
         try:
             self.classifier = build_classifier(cfg.classifier)
         except Exception as e:
