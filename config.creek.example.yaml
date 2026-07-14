@@ -21,14 +21,16 @@ classifier:
   min_confidence: 0.25
 
 detector:
-  # Absolute path on the data volume (shared with the feeder cam) — a bare
-  # filename makes YOLO try to download into /app, which uid 1000 can't write.
-  model: "/data/models/yolov8n.pt"
-  min_confidence: 0.35
-  # Broad animal set + person — BioCLIP does the real ID on animal crops, while
-  # "person" is recorded directly as "Person" (skips BioCLIP). Swap the model to
-  # MegaDetector + classes ["animal","person"] later to also catch raccoon/opossum.
-  classes: ["bird", "cat", "dog", "horse", "sheep", "cow", "bear", "person"]
+  # MegaDetector v6 (yolov9-e-1280) — built for wildlife/camera-trap scenes;
+  # catches raccoon/opossum/deer that COCO can't, and small/distant animals.
+  # Download once: wget -O /mnt/birddata/models/megadetector.pt \
+  #   "https://zenodo.org/records/15398270/files/MDV6-yolov9-e-1280.pt?download=1"
+  # It detects "animal"/"person"/"vehicle" — BioCLIP then IDs the animal crop,
+  # and "person" is recorded straight as Homo sapiens (skips BioCLIP).
+  model: "/data/models/megadetector.pt"
+  min_confidence: 0.30
+  classes: ["animal", "person"]
+  imgsz: 1280   # MD's -1280 variant wants this to spot small/distant critters
 
 pipeline:
   # Wildlife/panorama crops are lower-res than the feeder cam, so mammals score
