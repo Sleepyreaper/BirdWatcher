@@ -31,6 +31,9 @@ services:
       - /mnt/birddata/species_catalog.json:/app/data/species_catalog.json
       - /mnt/birddata/assets/reference:/app/assets/reference
       - /etc/localtime:/etc/localtime:ro
+    networks:
+      - default          # the rest of the stack (go2rtc, etc.)
+      - llm              # Ollama's network, so the naturalist can reach qwen3
     user: "1000:1000"   # sleepy
 
   birdwatcher-watch:
@@ -118,3 +121,11 @@ services:
   #     - "8971:8971"    # API
   #     - "8554:8554"    # go2rtc RTSP restream out (remove standalone go2rtc above)
   #     - "1984:1984"    # go2rtc web UI
+
+networks:
+  default:
+  # Ollama's network (compose project "localchat"). External so BirdWatcher can
+  # reach the qwen3 model at http://ollama:11434 for the resident naturalist.
+  llm:
+    external: true
+    name: localchat_localchat

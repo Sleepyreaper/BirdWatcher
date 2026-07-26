@@ -23,6 +23,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 from ..birdnetgo import BirdnetGoReader
 from ..config import PROJECT_ROOT, Config, load_config
 from ..database import PERSON_SPECIES, Database, week_start_for
+from ..naturalist import ask as nat_ask, digest as nat_digest
 from ..weather import hourly_weather
 
 DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -297,6 +298,26 @@ def create_app(cfg: Config | None = None) -> Flask:
     def review():
         return render_template("review.html")
 
+    # --- the resident naturalist (local LLM) -----------------------------
+    @app.route("/api/ask", methods=["POST"])
+    def api_ask():
+        data = request.get_json(force=True, silent=True) or {}
+        q = str(data.get("question", "")).strip()
+        if not q:
+            return jsonify({"ok": False, "answer": "Ask me something about the yard."}), 400
+        return jsonify(nat_ask(cfg.naturalist, str(cfg.paths.db_path()), q, region.get("name", "")))
+
+    @app.route("/api/digest")
+    def api_digest():
+        import time
+        cached = getattr(app, "_digest", None)
+        if cached and time.time() - cached[0] < 1800:   # regenerate at most every 30 min
+            return jsonify(cached[1])
+        result = nat_digest(cfg.naturalist, str(cfg.paths.db_path()), region.get("name", ""))
+        if result.get("ok"):
+            app._digest = (time.time(), result)
+        return jsonify(result)
+
     @app.route("/species/<path:name>")
     def species_page(name):
         return render_template("species.html", name=name)
@@ -419,6 +440,7 @@ def create_app(cfg: Config | None = None) -> Flask:
             "heard_only": heard_only,
             "catalog": catalog_list,
             "audio_on": birdnet.available(),
+            "naturalist_on": cfg.naturalist.enabled,
             "stats": {
                 "visits": total,
                 "species_seen": len(seen),

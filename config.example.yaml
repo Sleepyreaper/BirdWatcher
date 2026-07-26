@@ -44,3 +44,11 @@ weather:
   enabled: true
   latitude: 33.94
   longitude: -84.55
+
+naturalist:
+  # The resident naturalist — a local LLM (Ollama) that answers questions about
+  # your sightings and writes a daily digest. Flip to true once Ollama is
+  # reachable (BirdWatcher is bridged onto Ollama's network in docker-compose.yml).
+  enabled: false
+  ollama_url: "http://ollama:11434"
+  model: "qwen3:14b"

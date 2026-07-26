@@ -12,6 +12,7 @@ const LAST = {};  // last-seen count per cell, to pulse when it rises
 // Which camera this page shows: BirdWatcher (/) = feeder, CritterWatch (/critters) = creek.
 const MODE = window.BW_MODE || "feeder";
 const SOURCE = MODE === "creek" ? "creek" : "feeder";
+let natReady = false;   // resident-naturalist section wired up once
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -104,6 +105,41 @@ function render(d) {
     }
   }
   renderNow(d, today);
+  if (d.naturalist_on && MODE !== "creek" && !natReady) initNaturalist();
+}
+
+// --- the resident naturalist (local LLM) ------------------------------------
+function initNaturalist() {
+  natReady = true;
+  const sec = document.getElementById("naturalist");
+  if (!sec) return;
+  sec.hidden = false;
+
+  fetch("/api/digest").then((r) => r.json()).then((d) => {
+    const el = document.getElementById("nat-digest");
+    if (d.ok && d.text) { el.textContent = d.text; el.hidden = false; }
+  }).catch(() => {});
+
+  const form = document.getElementById("nat-ask");
+  const q = document.getElementById("nat-q");
+  const ans = document.getElementById("nat-answer");
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const question = q.value.trim();
+    if (!question) return;
+    ans.hidden = false; ans.textContent = "…reading the log";
+    ans.classList.add("thinking");
+    try {
+      const r = await (await fetch("/api/ask", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      })).json();
+      ans.textContent = r.answer || "(no answer)";
+    } catch {
+      ans.textContent = "Couldn't reach the naturalist — is the local model up?";
+    }
+    ans.classList.remove("thinking");
+  };
 }
 
 function cellFor(count, isToday, heard, ramp, key) {

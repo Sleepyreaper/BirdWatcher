@@ -147,6 +147,20 @@ class WeatherConfig:
 
 
 @dataclass
+class NaturalistConfig:
+    # The resident naturalist: a local LLM (Ollama) that answers questions about
+    # your sightings and writes a daily digest. Off by default until pointed at
+    # a running Ollama.
+    enabled: bool = False
+    # Ollama base URL. Cross-stack, so use the container's network name (put this
+    # watcher/web on Ollama's network) or a host-published port.
+    ollama_url: str = "http://ollama:11434"
+    model: str = "qwen3:14b"
+    temperature: float = 0.4
+    timeout: float = 120.0
+
+
+@dataclass
 class Config:
     camera: CameraConfig = field(default_factory=CameraConfig)
     motion: MotionConfig = field(default_factory=MotionConfig)
@@ -157,6 +171,7 @@ class Config:
     paths: Paths = field(default_factory=Paths)
     audio: AudioConfig = field(default_factory=AudioConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
+    naturalist: NaturalistConfig = field(default_factory=NaturalistConfig)
 
 
 def _resolve(p: str | os.PathLike[str]) -> Path:

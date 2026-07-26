@@ -61,6 +61,21 @@ body { margin: 0; background: var(--bg); color: var(--text); transition: backgro
 .lv-name { font-size: .95rem; font-weight: 600; margin-top: 2px; }
 .lv-sub { font-size: .74rem; color: var(--text-muted); margin-top: 1px; }
 
+/* resident naturalist */
+.naturalist { padding: 4px 28px 10px; }
+.nat-digest { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 10px; padding: 13px 16px; margin: 0 0 12px; font-size: .93rem; line-height: 1.55; color: var(--text-soft); }
+.nat-ask { display: flex; gap: 8px; }
+.nat-ask input { flex: 1; min-width: 0; font-size: .9rem; padding: 10px 13px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.nat-ask input:focus { outline: none; border-color: var(--accent); }
+.nat-ask button { font-size: .88rem; font-weight: 600; padding: 10px 18px; border-radius: 10px;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; flex: none; }
+.nat-ask button:hover { filter: brightness(1.08); }
+.nat-answer { background: var(--surface-soft); border-radius: 10px; padding: 12px 15px; margin: 10px 0 0;
+  font-size: .92rem; line-height: 1.55; color: var(--text); white-space: pre-wrap; }
+.nat-answer.thinking { color: var(--text-muted); font-style: italic; }
+
 .gridwrap { padding: 14px 28px 48px; overflow-x: auto; }
 .grid { display: block; min-width: 520px; }
 .grid.hourly { min-width: 600px; }
