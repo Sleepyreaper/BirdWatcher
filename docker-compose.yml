@@ -10,7 +10,7 @@ services:
 
   birdwatcher:
     build:
-      context: /home/sleepy/BirdWatcher
+      context: .          # the repo root (where this compose file lives) — portable across hosts
       dockerfile: Dockerfile
     image: birdwatcher:latest
     container_name: SleepyBirds
