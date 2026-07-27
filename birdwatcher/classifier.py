@@ -27,6 +27,12 @@ class SpeciesClassifier:
     def classify(self, crop) -> SpeciesResult:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def classify_topk(self, crop, k: int = 3) -> list[SpeciesResult]:
+        """Top-k species guesses, best first. Backends that can rank cheaply
+        (BioCLIP) override this; the default just wraps the single best so the
+        vision tiebreaker still has *a* candidate list to work with."""
+        return [self.classify(crop)]
+
 
 class StubClassifier(SpeciesClassifier):
     """Always returns a placeholder; lets the whole pipeline run without ML."""
@@ -131,20 +137,34 @@ class BioClipClassifier(SpeciesClassifier):
         print(f"[classifier] few-shot: {built} species tuned from the reference library")
         return emb
 
-    def classify(self, crop) -> SpeciesResult:
+    def _probs(self, crop):
+        """Softmax probabilities over the label set for one crop (or None)."""
         import cv2
         from PIL import Image
 
         if crop is None or crop.size == 0:
-            return SpeciesResult("Unknown bird", 0.0)
+            return None
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         img = self.preprocess(Image.fromarray(rgb)).unsqueeze(0).to(self.device)
         with self.torch.no_grad():
             feat = self.model.encode_image(img)
             feat /= feat.norm(dim=-1, keepdim=True)
-            probs = (100.0 * feat @ self._class_emb.T).softmax(dim=-1)[0]
+            return (100.0 * feat @ self._class_emb.T).softmax(dim=-1)[0]
+
+    def classify(self, crop) -> SpeciesResult:
+        probs = self._probs(crop)
+        if probs is None:
+            return SpeciesResult("Unknown bird", 0.0)
         idx = int(probs.argmax())
         return SpeciesResult(self._names[idx], float(probs[idx]))
+
+    def classify_topk(self, crop, k: int = 3) -> list[SpeciesResult]:
+        probs = self._probs(crop)
+        if probs is None:
+            return [SpeciesResult("Unknown bird", 0.0)]
+        vals, idxs = probs.topk(min(k, len(self._names)))
+        return [SpeciesResult(self._names[int(i)], float(v))
+                for v, i in zip(vals.tolist(), idxs.tolist())]
 
 
 class TFHubBirdClassifier(SpeciesClassifier):

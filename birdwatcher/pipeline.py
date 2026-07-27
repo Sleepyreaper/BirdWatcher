@@ -20,6 +20,7 @@ from .classifier import StubClassifier, build_classifier
 from .config import Config
 from .database import Database, PERSON_SPECIES
 from .detector import BirdDetector
+from .vision import adjudicate as vision_adjudicate
 from .voting import tally_votes
 
 Box = tuple[int, int, int, int]
@@ -170,31 +171,54 @@ class Pipeline:
               f"frames={v.frames} dur={dur:.0f}s id={conf:.2f}{agree_str}")
 
     def _vote_species(self, v: _Visit):
-        """Classify the visit's kept frames and let them vote on the species.
+        """Classify the visit's kept frames, let them vote, and — when the vote
+        is shaky — get a vision model's second opinion.
 
         Returns (species, confidence, crop, det_conf, agreement), or None if
         classification failed or the frames couldn't agree well enough to trust.
         """
-        ballots = []   # list[(SpeciesResult, _Sample)]
+        ballots = []   # list[(list[SpeciesResult] top-k, _Sample)]
         for s in v.samples:
             try:
-                ballots.append((self.classifier.classify(s.crop), s))
+                topk = self.classifier.classify_topk(s.crop, 3)
             except Exception as e:
                 print(f"[pipeline] classify failed: {e}")
+                continue
+            if topk:
+                ballots.append((topk, s))
         if not ballots:
             return None
-        outcome = tally_votes([r for r, _ in ballots])
+        outcome = tally_votes([tk[0] for tk, _ in ballots])
         if outcome is None:
             return None
-        # The frames couldn't agree on a species — not a clean ID, so toss it.
-        # (A single lucky "beaver" frame can't outvote a raccoon seen 20 times.)
-        if outcome.agreement < self.cfg.pipeline.vote_min_agreement:
+
+        vcfg = self.cfg.vision
+        low_agree = outcome.agreement < self.cfg.pipeline.vote_min_agreement
+        # A vision second-opinion is worth it when the frames disagreed, or when
+        # a rarely-seen species won (a surprising "bear" every frame agreed on).
+        if vcfg.enabled and (outcome.agreement < vcfg.trigger_agreement
+                             or self._is_rare(outcome.species, vcfg.rare_max_prior)):
+            best = v.samples[0]
+            verdict = vision_adjudicate(vcfg, best.crop, self._candidate_pool(ballots))
+            if verdict:
+                print(f"[pipeline] {v.first_seen:%H:%M:%S}  vision tiebreaker: "
+                      f"{outcome.species} ({outcome.votes}/{outcome.total}) -> {verdict}")
+                # Vision is authoritative; it reads as a confident, clean ID.
+                return verdict, vcfg.confidence, best.crop, best.det_conf, vcfg.confidence
+            if low_agree:
+                print(f"[pipeline] {v.first_seen:%H:%M:%S}  tossed {outcome.species} "
+                      f"— frames disagreed ({outcome.votes}/{outcome.total}), vision unsure")
+                return None
+            # Rare-but-agreed and vision couldn't confirm: keep the vote below.
+
+        # The frames couldn't agree and vision didn't (or couldn't) rescue it.
+        if low_agree:
             print(f"[pipeline] {v.first_seen:%H:%M:%S}  tossed {outcome.species} "
                   f"— frames disagreed ({outcome.votes}/{outcome.total} agreed)")
             return None
         # Represent the visit with the winning species' most-confident frame, so
         # the saved crop and the stored confidence come from the same evidence.
-        winners = [(r, s) for (r, s) in ballots if r.species == outcome.species]
+        winners = [(tk[0], s) for (tk, s) in ballots if tk[0].species == outcome.species]
         rep_r, rep_s = max(winners, key=lambda rs: rs[0].confidence)
         conf = rep_r.confidence
         # Toss weak matches outright (a squirrel tail scored 0.40 as a titmouse).
@@ -206,6 +230,32 @@ class Pipeline:
         if conf < self.cfg.classifier.min_confidence:
             species = "Unknown bird"
         return species, conf, rep_s.crop, rep_s.det_conf, outcome.agreement
+
+    def _is_rare(self, species: str, max_prior: int) -> bool:
+        """True if this species has few prior records — worth a vision check."""
+        try:
+            return self.db.species_count(species) <= max_prior
+        except Exception:
+            return False
+
+    def _candidate_pool(self, ballots) -> list[str]:
+        """Distinct species the frames considered (each frame's top-k), ranked by
+        votes then best confidence — the shortlist the vision model chooses from.
+        Includes runner-ups, so vision can pick a species the vote didn't."""
+        from collections import defaultdict
+
+        votes: dict[str, int] = defaultdict(int)
+        best_conf: dict[str, float] = defaultdict(float)
+        order: list[str] = []
+        for topk, _ in ballots:
+            for rank, r in enumerate(topk):
+                if r.species not in best_conf:
+                    order.append(r.species)
+                best_conf[r.species] = max(best_conf[r.species], r.confidence)
+                if rank == 0:
+                    votes[r.species] += 1
+        order.sort(key=lambda s: (votes[s], best_conf[s]), reverse=True)
+        return order[: self.cfg.vision.max_candidates]
 
     def _save_crop(self, crop, species: str, ts: datetime) -> str | None:
         if not self.cfg.pipeline.save_crops:

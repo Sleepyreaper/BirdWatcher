@@ -159,6 +159,16 @@ class Database:
             )
             self._conn.commit()
 
+    def species_count(self, name: str) -> int:
+        """How many kept sightings exist for a species — lets the pipeline spot a
+        rarely-seen ID (a candidate for the vision tiebreaker)."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM sightings "
+            "WHERE COALESCE(verified_species, species) = ? AND COALESCE(rejected, 0) = 0",
+            (name,),
+        ).fetchone()
+        return int(row[0])
+
     def library_counts(self) -> dict[str, int]:
         """{species: number of saved reference crops}."""
         rows = self._conn.execute(

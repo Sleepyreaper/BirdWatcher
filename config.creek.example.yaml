@@ -45,6 +45,17 @@ pipeline:
   vote_max_samples: 7
   vote_min_agreement: 0.5
 
+vision:
+  # Vision-LLM tiebreaker — the creek cam is exactly where this earns its keep:
+  # noisy, distant crops make BioCLIP guess, so on a shaky vote (or a surprising
+  # rare species like a "bear") a local vision model gets the deciding look. Stays
+  # on the LAN. Pull a vision model first:  ollama pull qwen2.5vl:7b
+  enabled: false
+  ollama_url: "http://ollama:11434"
+  model: "qwen2.5vl:7b"
+  trigger_agreement: 0.75
+  rare_max_prior: 2
+
 # No audio integration on this watcher (BirdNET-Go handles the feeder cam's mic).
 weather:
   enabled: false

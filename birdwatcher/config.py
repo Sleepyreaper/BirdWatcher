@@ -159,6 +159,32 @@ class WeatherConfig:
 
 
 @dataclass
+class VisionConfig:
+    # Vision-LLM tiebreaker: when a visit's frames can't agree on a species (low
+    # temporal-vote agreement) or the winner is a rarely-seen species, hand the
+    # best crop to a local vision model for a second opinion instead of tossing
+    # or trusting a shaky guess. Fully on-box (Ollama) to honor the LAN-only
+    # setup — the crop never leaves the network. Off until a vision model is
+    # pulled (e.g. `ollama pull qwen2.5vl:7b`) and this is enabled.
+    enabled: bool = False
+    # Ollama base URL + a *vision-capable* model (qwen2.5vl, llama3.2-vision, …).
+    ollama_url: str = "http://ollama:11434"
+    model: str = "qwen2.5vl:7b"
+    timeout: float = 60.0
+    # Fire when frame agreement is below this (the "frames disagreed" case).
+    trigger_agreement: float = 0.75
+    # Also fire when the voted species has this many or fewer prior records —
+    # catches a surprising ID (a "bear") even when every frame agreed on it.
+    rare_max_prior: int = 2
+    # Cap on how many candidate species (BioCLIP's top guesses across the visit's
+    # frames) to offer the vision model to choose among.
+    max_candidates: int = 6
+    # Stored confidence/agreement when the vision model confirms an ID — a
+    # vision-confirmed sighting should read as trustworthy, not tentative.
+    confidence: float = 0.85
+
+
+@dataclass
 class NaturalistConfig:
     # The resident naturalist: a local LLM (Ollama) that answers questions about
     # your sightings and writes a daily digest. Off by default until pointed at
@@ -183,6 +209,7 @@ class Config:
     paths: Paths = field(default_factory=Paths)
     audio: AudioConfig = field(default_factory=AudioConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
+    vision: VisionConfig = field(default_factory=VisionConfig)
     naturalist: NaturalistConfig = field(default_factory=NaturalistConfig)
 
 

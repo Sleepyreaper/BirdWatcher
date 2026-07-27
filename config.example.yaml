@@ -53,6 +53,18 @@ weather:
   latitude: 33.94
   longitude: -84.55
 
+vision:
+  # Vision-LLM tiebreaker — when a visit's frames can't agree on a species (or a
+  # rarely-seen species wins), hand the crop to a LOCAL vision model in your
+  # Ollama for a second opinion, instead of tossing it or trusting a shaky guess.
+  # The crop never leaves the LAN. Enable after pulling a vision model, e.g.:
+  #     ollama pull qwen2.5vl:7b      # ~6 GB, sits alongside qwen3 on the 3090
+  enabled: false
+  ollama_url: "http://ollama:11434"
+  model: "qwen2.5vl:7b"
+  trigger_agreement: 0.75   # fire when fewer than this fraction of frames agreed
+  rare_max_prior: 2         # also fire when the winning species has <= this many prior records
+
 naturalist:
   # The resident naturalist — a local LLM (Ollama) that answers questions about
   # your sightings and writes a daily digest. Flip to true once Ollama is

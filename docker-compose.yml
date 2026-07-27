@@ -54,6 +54,9 @@ services:
       - /mnt/birddata:/data
       - /mnt/birddata/species_catalog.json:/app/data/species_catalog.json
       - /etc/localtime:/etc/localtime:ro
+    networks:
+      - default          # the rest of the stack (go2rtc, etc.)
+      - llm              # Ollama's network — the vision tiebreaker runs here
     user: "1000:1000"   # sleepy
 
   # ── Creek / wildlife watcher (2nd camera) ──────────────────────────────────
@@ -78,6 +81,9 @@ services:
       - /mnt/birddata:/data
       - /mnt/birddata/species_catalog.json:/app/data/species_catalog.json
       - /etc/localtime:/etc/localtime:ro
+    networks:
+      - default          # the rest of the stack (go2rtc, etc.)
+      - llm              # Ollama's network — the creek vision tiebreaker runs here
     user: "1000:1000"   # sleepy
 
   # ── BirdNET-Go (audio) ────────────────────────────────────────────────────
