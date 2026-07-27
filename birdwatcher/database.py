@@ -120,6 +120,27 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def sightings_to_review(self, source: str | None = None,
+                            species: list[str] | None = None,
+                            limit: int = 100000) -> list[dict]:
+        """Unreviewed sightings that still have a crop — the queue for bulk
+        auto-review. Optionally scoped to one camera and/or specific species."""
+        q = ["SELECT id, species, image_path FROM sightings",
+             "WHERE verified_species IS NULL AND image_path IS NOT NULL",
+             "AND COALESCE(rejected, 0) = 0"]
+        params: list = []
+        if source:
+            q.append("AND source = ?")
+            params.append(source)
+        if species:
+            marks = ",".join("?" * len(species))
+            q.append(f"AND species IN ({marks})")
+            params.extend(species)
+        q.append("ORDER BY ts DESC LIMIT ?")
+        params.append(limit)
+        rows = self._conn.execute(" ".join(q), params).fetchall()
+        return [dict(r) for r in rows]
+
     def set_verified(self, sighting_id: int, species: str) -> None:
         with self._lock:
             self._conn.execute(

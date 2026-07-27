@@ -71,6 +71,18 @@ def cmd_seed(args) -> None:
     print(f"Seeded {n} fake sightings for the current week. Run `python run.py web`.")
 
 
+def cmd_review_auto(args) -> None:
+    """Re-judge unreviewed sightings with the local vision model (bulk cleanup)."""
+    from birdwatcher.review_auto import run_auto_review
+
+    cfg = load_config(args.config)
+    species = [s.strip() for s in args.species.split(",")] if args.species else None
+    run_auto_review(
+        cfg, source=args.source, species=species, limit=args.limit,
+        dry_run=args.dry_run, reject_unsure=args.reject_unsure,
+    )
+
+
 def cmd_test(args) -> None:
     """Connect to the RTSP stream and save one frame, to verify the camera."""
     try:
@@ -107,6 +119,17 @@ def main(argv=None) -> int:
     ]:
         p = sub.add_parser(name)
         p.set_defaults(func=fn)
+
+    # review-auto takes flags of its own (bulk vision re-review of the backlog).
+    pr = sub.add_parser("review-auto", help="bulk re-judge unreviewed sightings with the vision model")
+    pr.add_argument("--source", default=None, help="only this camera, e.g. creek")
+    pr.add_argument("--species", default=None,
+                    help="comma-separated species to target, e.g. 'Southern Flying Squirrel,American Black Bear'")
+    pr.add_argument("--limit", type=int, default=100000, help="cap how many to process")
+    pr.add_argument("--dry-run", action="store_true", help="preview the plan; write nothing")
+    pr.add_argument("--reject-unsure", action="store_true",
+                    help="hide sightings the vision model can't identify")
+    pr.set_defaults(func=cmd_review_auto)
 
     args = parser.parse_args(argv)
     args.func(args)
