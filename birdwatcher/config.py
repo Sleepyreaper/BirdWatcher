@@ -102,6 +102,18 @@ class PipelineConfig:
     # birds against the bird-heavy label set, so lower this if real critters get
     # tossed.
     min_confidence: float = 0.70
+    # Temporal voting: instead of trusting the single sharpest frame, classify
+    # several frames of a visit and let them vote on the species. Kills the
+    # "one lucky-but-wrong frame decides" failure (a woodpecker mid-turn logged
+    # as a beaver) and yields an honest agreement signal. Applies to birds and
+    # critters alike; people bypass it (recorded straight from the detector).
+    vote_enabled: bool = True
+    # How many frames of a visit to classify and vote (the top-N sharpest).
+    # Cheap on a GPU — each is one BioCLIP image encode. 1 disables voting.
+    vote_max_samples: int = 7
+    # Toss a visit whose winning species didn't get at least this fraction of
+    # the votes — i.e. the frames couldn't agree, so it's not a clean ID.
+    vote_min_agreement: float = 0.5
     # Save the single best cropped bird image per visit.
     save_crops: bool = True
     # If set, POST each visit to this URL (a remote dashboard's /api/ingest)

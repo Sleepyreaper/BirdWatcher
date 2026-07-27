@@ -36,6 +36,14 @@ pipeline:
   # Wildlife/panorama crops are lower-res than the feeder cam, so mammals score
   # a bit lower — a gentler floor than the feeder's 0.70 while we dial things in.
   min_confidence: 0.50
+  # Temporal voting — classify several frames of a visit and let them vote, so a
+  # single lucky-but-wrong frame (a raccoon caught mid-turn reading as a beaver)
+  # can't decide the species. This matters most on the noisy creek feed. Raise
+  # vote_min_agreement to be stricter about tossing "the frames couldn't agree"
+  # visits; each vote is one cheap BioCLIP encode on the GPU.
+  vote_enabled: true
+  vote_max_samples: 7
+  vote_min_agreement: 0.5
 
 # No audio integration on this watcher (BirdNET-Go handles the feeder cam's mic).
 weather:

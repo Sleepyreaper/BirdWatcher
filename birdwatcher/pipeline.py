@@ -2,9 +2,12 @@
 
 Birds are matched across frames by bounding-box overlap, so a single bird becomes
 one "visit" no matter how many frames it appears in. While a visit is open we keep
-the *sharpest* crop (variance-of-Laplacian x detector confidence). When the bird
-leaves (no sighting for `visit_timeout`), we classify that one best crop and write
-a single row. So the species classifier runs once per visit, not once per frame.
+the *N sharpest* crops (variance-of-Laplacian x detector confidence). When the bird
+leaves (no sighting for `visit_timeout`), we classify those frames and let them
+*vote* on the species — the consensus wins, and how strongly the frames agreed
+becomes an honest confidence signal. Voting kills the "one lucky-but-wrong frame
+decides the visit" failure; see voting.py. Set pipeline.vote_max_samples=1 (or
+vote_enabled=false) to fall back to the old single-best-crop behavior.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from .classifier import StubClassifier, build_classifier
 from .config import Config
 from .database import Database, PERSON_SPECIES
 from .detector import BirdDetector
+from .voting import tally_votes
 
 Box = tuple[int, int, int, int]
 
@@ -43,15 +47,27 @@ def _sharpness(crop) -> float:
 
 
 @dataclass
+class _Sample:
+    score: float          # sharpness × detector confidence — higher = crisper crop
+    crop: object
+    det_conf: float
+    label: str            # detector class ("bird", "person", …)
+
+
+@dataclass
 class _Visit:
     box: Box
     first_seen: datetime
     last_seen: datetime
     frames: int
-    best_score: float
-    best_crop: object
-    best_det_conf: float
-    best_label: str = ""   # detector class of the best frame ("bird", "person", …)
+    samples: list         # the top-N _Sample by score (sharpest first) — voted on
+
+
+def _keep_top(samples: list, sample: _Sample, k: int) -> None:
+    """Add a sample to a visit, keeping only the k sharpest (best first)."""
+    samples.append(sample)
+    samples.sort(key=lambda s: s.score, reverse=True)
+    del samples[k:]
 
 
 class Pipeline:
@@ -82,23 +98,26 @@ class Pipeline:
                 best_iou, best_id = score, vid
         return best_id
 
+    def _sample_cap(self) -> int:
+        """How many frames per visit to keep for voting (1 = old behavior)."""
+        if not self.cfg.pipeline.vote_enabled:
+            return 1
+        return max(1, self.cfg.pipeline.vote_max_samples)
+
     def process_frame(self, frame) -> None:
         now = datetime.now()
+        k = self._sample_cap()
         for det in self.detector.detect(frame):
             score = _sharpness(det.crop) * (0.5 + det.confidence)
+            sample = _Sample(score, det.crop, det.confidence, det.label)
             vid = self._match(det.box)
             if vid is None:
-                self._open[self._next_id] = _Visit(
-                    det.box, now, now, 1, score, det.crop, det.confidence, det.label
-                )
+                self._open[self._next_id] = _Visit(det.box, now, now, 1, [sample])
                 self._next_id += 1
             else:
                 v = self._open[vid]
                 v.box, v.last_seen, v.frames = det.box, now, v.frames + 1
-                if score > v.best_score:
-                    v.best_score, v.best_crop, v.best_det_conf, v.best_label = (
-                        score, det.crop, det.confidence, det.label,
-                    )
+                _keep_top(v.samples, sample, k)
         self._reap(now)
 
     def _reap(self, now: datetime, flush: bool = False) -> None:
@@ -111,49 +130,82 @@ class Pipeline:
             self._record(self._open.pop(vid))
 
     def _record(self, v: _Visit) -> None:
-        if v.frames < self.cfg.pipeline.min_visit_frames:
+        if v.frames < self.cfg.pipeline.min_visit_frames or not v.samples:
             return
+        best = v.samples[0]   # sharpest frame (samples kept sorted, best first)
+        agreement: float | None = None
         # People bypass BioCLIP entirely — recorded as "Homo sapiens" (never
-        # toss; security matters), using the detector's confidence.
-        if v.best_label == "person":
-            species, conf = PERSON_SPECIES, v.best_det_conf
+        # toss; security matters), using the detector's confidence + sharpest crop.
+        if best.label == "person":
+            species, conf, crop, det_conf = (
+                PERSON_SPECIES, best.det_conf, best.crop, best.det_conf,
+            )
         else:
-            try:
-                result = self.classifier.classify(v.best_crop)
-            except Exception as e:
-                print(f"[pipeline] classify failed: {e}")
-                return
-            # Toss weak matches outright (squirrel tail scored 0.4 as a titmouse, etc.)
-            if result.confidence < self.cfg.pipeline.min_confidence:
-                print(f"[pipeline] {v.first_seen:%H:%M:%S}  tossed {result.species} "
-                      f"({result.confidence:.2f} < {self.cfg.pipeline.min_confidence:.2f}) "
-                      f"— not a clean match")
-                return
-            species = result.species
-            if result.confidence < self.cfg.classifier.min_confidence:
-                species = "Unknown bird"
-            conf = result.confidence
+            decided = self._vote_species(v)
+            if decided is None:
+                return   # classify failed, or the frames couldn't agree
+            species, conf, crop, det_conf, agreement = decided
         try:
             if self.cfg.pipeline.ingest_url:
-                self._post_visit(v, species, conf)
+                self._post_visit(v, species, conf, crop, det_conf, agreement)
             else:
-                rel = self._save_crop(v.best_crop, species, v.first_seen)
+                rel = self._save_crop(crop, species, v.first_seen)
                 self.db.add_visit(
                     species=species,
                     confidence=conf,
                     image_path=rel,
-                    detector_conf=v.best_det_conf,
+                    detector_conf=det_conf,
                     first_ts=v.first_seen,
                     last_ts=v.last_seen,
                     frames=v.frames,
                     source=self.cfg.camera.source,
+                    agreement=agreement,
                 )
         except Exception as e:
             print(f"[pipeline] record failed: {e}")
             return
         dur = (v.last_seen - v.first_seen).total_seconds()
+        agree_str = f" agree={agreement:.0%}" if agreement is not None else ""
         print(f"[pipeline] {v.first_seen:%H:%M:%S}  visit: {species}  "
-              f"frames={v.frames} dur={dur:.0f}s id={conf:.2f}")
+              f"frames={v.frames} dur={dur:.0f}s id={conf:.2f}{agree_str}")
+
+    def _vote_species(self, v: _Visit):
+        """Classify the visit's kept frames and let them vote on the species.
+
+        Returns (species, confidence, crop, det_conf, agreement), or None if
+        classification failed or the frames couldn't agree well enough to trust.
+        """
+        ballots = []   # list[(SpeciesResult, _Sample)]
+        for s in v.samples:
+            try:
+                ballots.append((self.classifier.classify(s.crop), s))
+            except Exception as e:
+                print(f"[pipeline] classify failed: {e}")
+        if not ballots:
+            return None
+        outcome = tally_votes([r for r, _ in ballots])
+        if outcome is None:
+            return None
+        # The frames couldn't agree on a species — not a clean ID, so toss it.
+        # (A single lucky "beaver" frame can't outvote a raccoon seen 20 times.)
+        if outcome.agreement < self.cfg.pipeline.vote_min_agreement:
+            print(f"[pipeline] {v.first_seen:%H:%M:%S}  tossed {outcome.species} "
+                  f"— frames disagreed ({outcome.votes}/{outcome.total} agreed)")
+            return None
+        # Represent the visit with the winning species' most-confident frame, so
+        # the saved crop and the stored confidence come from the same evidence.
+        winners = [(r, s) for (r, s) in ballots if r.species == outcome.species]
+        rep_r, rep_s = max(winners, key=lambda rs: rs[0].confidence)
+        conf = rep_r.confidence
+        # Toss weak matches outright (a squirrel tail scored 0.40 as a titmouse).
+        if conf < self.cfg.pipeline.min_confidence:
+            print(f"[pipeline] {v.first_seen:%H:%M:%S}  tossed {outcome.species} "
+                  f"({conf:.2f} < {self.cfg.pipeline.min_confidence:.2f}) — not a clean match")
+            return None
+        species = outcome.species
+        if conf < self.cfg.classifier.min_confidence:
+            species = "Unknown bird"
+        return species, conf, rep_s.crop, rep_s.det_conf, outcome.agreement
 
     def _save_crop(self, crop, species: str, ts: datetime) -> str | None:
         if not self.cfg.pipeline.save_crops:
@@ -170,7 +222,8 @@ class Pipeline:
             raise RuntimeError(f"failed to write crop: {out}")
         return str(out.relative_to(self.captures_dir)).replace("\\", "/")
 
-    def _post_visit(self, v: _Visit, species: str, conf: float) -> None:
+    def _post_visit(self, v: _Visit, species: str, conf: float, crop,
+                    det_conf: float, agreement: float | None) -> None:
         """Send the visit (metadata + best crop) to a remote dashboard's ingest API."""
         import base64
         import json
@@ -178,15 +231,16 @@ class Pipeline:
 
         import cv2
 
-        ok, buf = cv2.imencode(".jpg", v.best_crop)
+        ok, buf = cv2.imencode(".jpg", crop)
         payload = json.dumps({
             "token": self.cfg.pipeline.ingest_token,
             "species": species,
             "confidence": conf,
-            "detector_conf": v.best_det_conf,
+            "detector_conf": det_conf,
             "first_ts": v.first_seen.isoformat(timespec="seconds"),
             "last_ts": v.last_seen.isoformat(timespec="seconds"),
             "frames": v.frames,
+            "agreement": agreement,
             "image_b64": base64.b64encode(buf.tobytes()).decode() if ok else "",
         }).encode()
         req = urllib.request.Request(

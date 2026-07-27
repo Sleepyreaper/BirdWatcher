@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS sightings (
     image_path    TEXT,
     detector_conf REAL,
     last_ts       TEXT,
-    frames        INTEGER DEFAULT 1
+    frames        INTEGER DEFAULT 1,
+    agreement     REAL
 );
 CREATE INDEX IF NOT EXISTS idx_sightings_ts ON sightings(ts);
 CREATE INDEX IF NOT EXISTS idx_sightings_species ON sightings(species);
@@ -43,7 +44,7 @@ PERSON_SPECIES = "Homo sapiens"
 # Columns added after the first release; applied to existing DBs at startup.
 _MIGRATIONS = [("last_ts", "TEXT"), ("frames", "INTEGER DEFAULT 1"),
                ("verified_species", "TEXT"), ("rejected", "INTEGER DEFAULT 0"),
-               ("source", "TEXT DEFAULT 'feeder'")]
+               ("source", "TEXT DEFAULT 'feeder'"), ("agreement", "REAL")]
 
 
 class Database:
@@ -84,13 +85,14 @@ class Database:
         last_ts: datetime | None = None,
         frames: int = 1,
         source: str = "feeder",
+        agreement: float | None = None,
     ) -> int:
         first_ts = first_ts or datetime.now()
         last_ts = last_ts or first_ts
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO sightings (ts, species, confidence, image_path, detector_conf,"
-                " last_ts, frames, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " last_ts, frames, source, agreement) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     first_ts.isoformat(timespec="seconds"),
                     species,
@@ -100,6 +102,7 @@ class Database:
                     last_ts.isoformat(timespec="seconds"),
                     frames,
                     source,
+                    agreement,
                 ),
             )
             self._conn.commit()

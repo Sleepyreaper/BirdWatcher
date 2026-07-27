@@ -36,6 +36,14 @@ pipeline:
   # squirrel tail scored 0.40 as a Tufted Titmouse. Lower it if real critters
   # (mammals score a bit lower vs the bird-heavy labels) start getting tossed.
   min_confidence: 0.70
+  # Temporal voting — classify several frames of each visit and let them vote on
+  # the species instead of trusting the single sharpest frame. A House Finch
+  # nailed on 40/46 frames wins clean; a one-off misread gets outvoted. Also
+  # yields an honest "agreement" signal stored with each sighting. Set
+  # vote_max_samples: 1 (or vote_enabled: false) for the old single-frame path.
+  vote_enabled: true
+  vote_max_samples: 7
+  vote_min_agreement: 0.5
 
 audio:
   birdnet_db: ""   # /data/birdnet-go/birdnet.db when birdnet-go container is running
