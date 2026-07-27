@@ -34,6 +34,22 @@ def _species_line(rows: list[sqlite3.Row], limit: int = 14) -> str:
     return ", ".join(parts) if parts else "nothing yet"
 
 
+def _certainty_tag(agreement, confidence) -> str | None:
+    """A short reliability flag for one sighting, from temporal-vote agreement
+    (how many frames of the visit agreed on the species). Falls back to the raw
+    match confidence for older rows that predate voting. None = looks solid, no
+    need to hedge."""
+    if agreement is not None:
+        if agreement < 0.55:
+            return "very tentative"
+        if agreement < 0.75:
+            return "tentative"
+        return None
+    if confidence is not None and confidence < 0.55:
+        return "tentative"
+    return None
+
+
 def build_context(db_path: str, region_name: str = "", recent: int = 18) -> str:
     """A compact, human-readable snapshot of recent activity for the LLM."""
     con = _con(db_path)
@@ -61,6 +77,20 @@ def build_context(db_path: str, region_name: str = "", recent: int = 18) -> str:
         ).fetchall()
         lines.append(f"  {cam}: {_species_line(rows)}")
 
+    # sightings today whose frames didn't strongly agree — the model should
+    # treat these as unconfirmed rather than narrate them as vivid fact.
+    unc = con.execute(
+        f"SELECT ts, {seen} AS species, source, agreement AS ag FROM sightings "
+        f"WHERE date(ts) = ? AND {kept} AND agreement IS NOT NULL AND agreement < 0.75 "
+        "ORDER BY agreement ASC LIMIT 8",
+        (today.isoformat(),),
+    ).fetchall()
+    if unc:
+        lines.append("\nFLAGGED UNCERTAIN TODAY (frames disagreed — treat as tentative, not confirmed):")
+        for r in unc:
+            t = datetime.fromisoformat(r["ts"]).strftime("%I:%M%p").lstrip("0")
+            lines.append(f"  {t} {r['species']} ({r['source']}) — only {round(r['ag'] * 100)}% frame agreement")
+
     # last 7 days
     wk = con.execute(
         f"SELECT {seen} AS species, COUNT(*) AS n FROM sightings "
@@ -81,16 +111,20 @@ def build_context(db_path: str, region_name: str = "", recent: int = 18) -> str:
         f"ON RECORD: {alltime['s']} species since {alltime['first'] or 'recently'}."
     )
 
-    # most recent sightings, newest first
+    # most recent sightings, newest first — annotated with how well the frames
+    # agreed, so the model can speak with calibrated confidence.
     rec = con.execute(
-        f"SELECT ts, {seen} AS species, source, ROUND(confidence, 2) AS c "
+        f"SELECT ts, {seen} AS species, source, ROUND(confidence, 2) AS c, agreement AS ag "
         f"FROM sightings WHERE {kept} ORDER BY ts DESC LIMIT ?",
         (recent,),
     ).fetchall()
     lines.append("\nMOST RECENT:")
     for r in rec:
         t = datetime.fromisoformat(r["ts"]).strftime("%m-%d %I:%M%p").replace(" 0", " ")
-        lines.append(f"  {t}  {r['species']} ({r['source']})")
+        agree = f", {round(r['ag'] * 100)}% agree" if r["ag"] is not None else ""
+        tag = _certainty_tag(r["ag"], r["c"])
+        flag = f" [{tag}]" if tag else ""
+        lines.append(f"  {t}  {r['species']} ({r['source']}{agree}){flag}")
 
     con.close()
     return "\n".join(lines)
@@ -117,19 +151,29 @@ def _chat(cfg: NaturalistConfig, system: str, user: str) -> str:
     return _THINK.sub("", text).strip()
 
 
+_CALIBRATION = (
+    "Each sighting is auto-identified by camera, so IDs can be wrong. A frame-"
+    "agreement percentage shows how many frames of the visit agreed on the "
+    "species; low agreement or a [tentative]/[very tentative] flag means the ID "
+    "is shaky. Hedge on those — 'possibly', 'what may have been', 'unconfirmed' — "
+    "and never state a tentative ID as fact. Be especially skeptical of a "
+    "surprising species (a bear, a rare visitor, an implausible count) that is "
+    "flagged uncertain; call it a likely misread rather than describing it vividly."
+)
+
 _ASK_SYSTEM = (
     "You are the resident naturalist for a backyard wildlife camera system. "
     "Answer using ONLY the log below — never invent sightings or numbers. If the "
     "log doesn't cover the question, say so plainly. Be concise, warm, and "
     "specific, like a knowledgeable birder friend. Two sentences unless more is "
-    "genuinely needed.\n\nLOG:\n{context}"
+    "genuinely needed.\n" + _CALIBRATION + "\n\nLOG:\n{context}"
 )
 
 _DIGEST_SYSTEM = (
     "You are the resident naturalist for a backyard wildlife camera system. "
     "From the log below, write a short daily field note (2-4 sentences): the "
     "standouts, anything unusual, and the feel of the day. Warm and specific, "
-    "not a dry list. Use ONLY what's in the log.\n\nLOG:\n{context}"
+    "not a dry list. Use ONLY what's in the log.\n" + _CALIBRATION + "\n\nLOG:\n{context}"
 )
 
 

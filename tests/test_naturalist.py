@@ -20,6 +20,24 @@ def test_context_summarizes_sightings(tmp_path):
     assert "feeder" in ctx and "creek" in ctx
 
 
+def test_context_flags_low_agreement_as_tentative(tmp_path):
+    db = Database(tmp_path / "bw.db")
+    now = datetime.now()
+    # A shaky creek ID (frames barely agreed) and a rock-solid feeder one.
+    db.add_visit("American Beaver", 0.8, image_path="b.jpg", source="creek",
+                 agreement=0.4, first_ts=now)
+    db.add_visit("Northern Cardinal", 0.95, image_path="c.jpg", source="feeder",
+                 agreement=1.0, first_ts=now)
+    db.close()
+
+    ctx = naturalist.build_context(str(tmp_path / "bw.db"), "Test Yard")
+    assert "tentative" in ctx.lower()            # the beaver is flagged
+    assert "American Beaver" in ctx
+    assert "FLAGGED UNCERTAIN" in ctx            # and called out explicitly
+    # the confident cardinal isn't dragged into the uncertain list
+    assert "Northern Cardinal (feeder)" not in ctx.split("FLAGGED UNCERTAIN")[1].split("LAST 7")[0]
+
+
 def test_ask_disabled_is_graceful(tmp_path):
     db = Database(tmp_path / "bw.db")
     db.close()
