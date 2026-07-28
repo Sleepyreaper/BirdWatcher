@@ -114,6 +114,15 @@ class PipelineConfig:
     # Toss a visit whose winning species didn't get at least this fraction of
     # the votes — i.e. the frames couldn't agree, so it's not a clean ID.
     vote_min_agreement: float = 0.5
+    # Per-camera known-false-positive labels: drop any visit whose final species
+    # lands on one of these, before it's recorded. Some misreads are systematic
+    # and location-specific — the creek's IR illuminator lights up moths that
+    # BioCLIP confidently calls "Southern Flying Squirrel" (and dark blurs it
+    # calls "American Black Bear"), species that never actually occur here. No
+    # downstream signal (brightness, sharpness, detector confidence) separates
+    # those bug-blobs from real animals, so we blocklist the labels themselves.
+    # Empty = record everything.
+    reject_species: list[str] = field(default_factory=list)
     # Save the single best cropped bird image per visit.
     save_crops: bool = True
     # If set, POST each visit to this URL (a remote dashboard's /api/ingest)

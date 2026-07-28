@@ -44,6 +44,14 @@ pipeline:
   vote_enabled: true
   vote_max_samples: 7
   vote_min_agreement: 0.5
+  # Known false positives at THIS creek: the IR illuminator lights up moths that
+  # BioCLIP confidently calls a "Southern Flying Squirrel" and dark blurs it calls
+  # an "American Black Bear" — species that don't actually occur here. No pixel or
+  # detector signal separates the bug-blobs from real animals, so we drop these
+  # labels outright. Add others if a new systematic phantom shows up.
+  reject_species:
+    - "Southern Flying Squirrel"
+    - "American Black Bear"
 
 vision:
   # Vision-LLM tiebreaker — the creek cam is exactly where this earns its keep:

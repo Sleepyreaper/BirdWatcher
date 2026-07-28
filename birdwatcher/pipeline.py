@@ -146,6 +146,12 @@ class Pipeline:
             if decided is None:
                 return   # classify failed, or the frames couldn't agree
             species, conf, crop, det_conf, agreement = decided
+        # Known-false-positive labels for this camera (e.g. the creek's IR-lit
+        # moths that read as "flying squirrel") never reach the DB.
+        if species in self.cfg.pipeline.reject_species:
+            print(f"[pipeline] {v.first_seen:%H:%M:%S}  dropped {species} — on "
+                  f"{self.cfg.camera.source}'s reject list (known false positive here)")
+            return
         try:
             if self.cfg.pipeline.ingest_url:
                 self._post_visit(v, species, conf, crop, det_conf, agreement)

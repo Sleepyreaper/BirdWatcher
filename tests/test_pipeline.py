@@ -216,6 +216,26 @@ def test_candidate_pool_includes_runner_ups_ranked_by_votes(pipe):
     assert set(pool) == {"Raccoon", "American Beaver", "River Otter"}
 
 
+def test_reject_species_drops_a_blocklisted_label(pipe):
+    """A visit whose final ID is on the camera's reject list never reaches the DB."""
+    pipe.cfg.pipeline.reject_species = ["Southern Flying Squirrel"]
+    crops = [object() for _ in range(3)]
+    mapping = {id(c): ("Southern Flying Squirrel", 0.95) for c in crops}
+    pipe.classifier = _MapClassifier(mapping)
+    samples = [_Sample(100.0 - i, c, 0.9, "animal") for i, c in enumerate(crops)]
+    pipe._record(_visit(samples))
+    assert pipe.db.rows == []
+
+
+def test_reject_species_leaves_other_species_alone(pipe):
+    """The blocklist is surgical — a non-listed species records normally."""
+    pipe.cfg.pipeline.reject_species = ["Southern Flying Squirrel"]
+    pipe.classifier = _GoodClassifier()          # Northern Cardinal
+    pipe._record(_visit())
+    assert len(pipe.db.rows) == 1
+    assert pipe.db.rows[0]["species"] == "Northern Cardinal"
+
+
 def test_record_save_failure_does_not_raise(pipe, monkeypatch):
     monkeypatch.setattr(pipe, "_save_crop", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("disk")))
     pipe._record(_visit())
